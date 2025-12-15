@@ -1,31 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import ContentCard from "@/components/ContentCard";
 import AIEvaluation from "@/components/AIEvaluation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, Video, Box, X } from "lucide-react";
+import { FileText, Video, Box, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Mock data - in production, this would come from database
-const mockContent = {
-  pyqs: [
-    { id: 1, title: "2023 Mid-Semester Exam", file: "#" },
-    { id: 2, title: "2022 End-Semester Exam", file: "#" },
-    { id: 3, title: "2023 Quiz Paper", file: "#" },
-  ],
-  videos: [
-    { id: 1, title: "Introduction to Projections", url: "#", duration: "12:34" },
-    { id: 2, title: "Drawing Front View", url: "#", duration: "18:45" },
-    { id: 3, title: "Common Mistakes to Avoid", url: "#", duration: "8:20" },
-  ],
-  objects: [
-    { id: 1, title: "Simple Bracket", image: "/placeholder.svg" },
-    { id: 2, title: "Machine Block", image: "/placeholder.svg" },
-    { id: 3, title: "Bearing Housing", image: "/placeholder.svg" },
-  ],
-};
+interface ContentItem {
+  id: string;
+  title: string;
+  file_url: string | null;
+  content_type: string;
+}
 
 const typeLabels: Record<string, string> = {
   orthographic: "Orthographic Projection",
@@ -37,9 +26,36 @@ const DrawingContent = () => {
   const { semesterId, drawingType } = useParams<{ semesterId: string; drawingType: string }>();
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
   const [showAIEvaluation, setShowAIEvaluation] = useState(false);
+  const [content, setContent] = useState<ContentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const semester = parseInt(semesterId || "1");
   const type = drawingType || "orthographic";
+
+  useEffect(() => {
+    fetchContent();
+  }, [semesterId, drawingType]);
+
+  const fetchContent = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('content')
+        .select('*')
+        .eq('semester', semesterId || '1')
+        .eq('drawing_type', type);
+
+      if (error) throw error;
+      setContent(data || []);
+    } catch (error) {
+      console.error('Error fetching content:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const pyqs = content.filter(c => c.content_type === 'pyq');
+  const videos = content.filter(c => c.content_type === 'video');
+  const objects = content.filter(c => c.content_type === 'object');
 
   if (showAIEvaluation) {
     return (
@@ -114,14 +130,22 @@ const DrawingContent = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-4">
-            {mockContent.pyqs.length > 0 ? (
-              mockContent.pyqs.map((item) => (
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : pyqs.length > 0 ? (
+              pyqs.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
                 >
                   <span className="font-medium">{item.title}</span>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => item.file_url && window.open(item.file_url, '_blank')}
+                  >
                     Download
                   </Button>
                 </div>
@@ -145,17 +169,24 @@ const DrawingContent = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-4">
-            {mockContent.videos.length > 0 ? (
-              mockContent.videos.map((item) => (
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : videos.length > 0 ? (
+              videos.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
                 >
-                  <div>
-                    <span className="font-medium block">{item.title}</span>
-                    <span className="text-sm text-muted-foreground">{item.duration}</span>
-                  </div>
-                  <Button variant="outline" size="sm">
+                  <span className="font-medium">{item.title}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => item.file_url && window.open(item.file_url, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4" />
                     Watch
                   </Button>
                 </div>
@@ -179,14 +210,22 @@ const DrawingContent = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="grid sm:grid-cols-2 gap-4 mt-4">
-            {mockContent.objects.length > 0 ? (
-              mockContent.objects.map((item) => (
+            {isLoading ? (
+              <div className="flex justify-center py-8 col-span-2">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : objects.length > 0 ? (
+              objects.map((item) => (
                 <div
                   key={item.id}
                   className="rounded-xl bg-muted/50 overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  <div className="aspect-square bg-muted flex items-center justify-center">
-                    <Box className="w-16 h-16 text-muted-foreground/30" />
+                  <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
+                    {item.file_url ? (
+                      <img src={item.file_url} alt={item.title} className="w-full h-full object-contain" />
+                    ) : (
+                      <Box className="w-16 h-16 text-muted-foreground/30" />
+                    )}
                   </div>
                   <div className="p-4">
                     <span className="font-medium">{item.title}</span>
