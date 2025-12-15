@@ -1,8 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 import { Upload, Image, Brain, CheckCircle, XCircle, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
+import { toast } from "sonner";
 
 interface EvaluationResult {
   score: number;
@@ -12,23 +15,62 @@ interface EvaluationResult {
 }
 
 interface AIEvaluationProps {
-  referenceImage?: string;
   drawingType: string;
   onBack: () => void;
 }
 
-const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps) => {
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+const AIEvaluation = ({ drawingType, onBack }: AIEvaluationProps) => {
+  const { semesterId } = useParams<{ semesterId: string }>();
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [userDrawing, setUserDrawing] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [result, setResult] = useState<EvaluationResult | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadingRef, setLoadingRef] = useState(true);
+  const userFileInputRef = useRef<HTMLInputElement>(null);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    fetchReferenceImage();
+  }, [semesterId, drawingType]);
+
+  const fetchReferenceImage = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('content')
+        .select('file_url')
+        .eq('semester', semesterId || '1')
+        .eq('drawing_type', drawingType)
+        .eq('content_type', 'reference')
+        .maybeSingle();
+
+      if (data?.file_url) {
+        setReferenceImage(data.file_url);
+      }
+    } catch (error) {
+      console.error('Error fetching reference:', error);
+    } finally {
+      setLoadingRef(false);
+    }
+  };
+
+  const handleReferenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setUploadedImage(e.target?.result as string);
+        setReferenceImage(e.target?.result as string);
+        setResult(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUserDrawingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setUserDrawing(e.target?.result as string);
         setResult(null);
       };
       reader.readAsDataURL(file);
@@ -36,27 +78,36 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
   };
 
   const evaluateDrawing = async () => {
-    if (!uploadedImage) return;
+    if (!userDrawing || !referenceImage) {
+      toast.error("Please upload both reference and your drawing");
+      return;
+    }
     
     setIsEvaluating(true);
     
-    // Simulate AI evaluation (in production, this would call an actual AI service)
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Mock evaluation result
-    const mockResult: EvaluationResult = {
-      score: Math.floor(Math.random() * 3) + 7, // 7-10
-      accuracy: Math.floor(Math.random() * 15) + 80, // 80-95%
-      errors: [
-        "Minor misalignment in the top view projection",
-        "Line weight inconsistency in hidden lines",
-        "Slight deviation in dimension placement",
-      ].slice(0, Math.floor(Math.random() * 3) + 1),
-      feedback: `Good ${drawingType} projection! Your understanding of view alignment is strong. Focus on maintaining consistent line weights and accurate dimension placements for improvement.`,
-    };
-    
-    setResult(mockResult);
-    setIsEvaluating(false);
+    try {
+      const { data, error } = await supabase.functions.invoke('evaluate-drawing', {
+        body: {
+          userDrawing,
+          referenceImage,
+          drawingType,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setResult(data);
+    } catch (error: any) {
+      console.error('Evaluation error:', error);
+      toast.error(error.message || "Failed to evaluate drawing");
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -91,7 +142,7 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
               {drawingType.charAt(0).toUpperCase() + drawingType.slice(1)} Drawing Evaluation
             </h1>
             <p className="text-muted-foreground">
-              Upload your drawing to get instant AI feedback on accuracy and errors
+              Upload both reference and your drawing to get AI feedback
             </p>
           </div>
 
@@ -102,31 +153,48 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
                 <Image className="w-5 h-5 text-primary" />
                 Reference Image
               </h3>
-              <div className="aspect-square rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-                {referenceImage ? (
+              <div
+                onClick={() => refFileInputRef.current?.click()}
+                className="aspect-square rounded-xl bg-muted border-2 border-dashed border-border hover:border-primary/50 flex items-center justify-center cursor-pointer transition-all overflow-hidden group"
+              >
+                {loadingRef ? (
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                ) : referenceImage ? (
                   <img src={referenceImage} alt="Reference" className="w-full h-full object-contain" />
                 ) : (
-                  <div className="text-center text-muted-foreground p-4">
-                    <Image className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No reference image set</p>
-                    <p className="text-xs">Admin can upload in admin panel</p>
+                  <div className="text-center text-muted-foreground p-4 group-hover:text-primary transition-colors">
+                    <Upload className="w-12 h-12 mx-auto mb-2" />
+                    <p className="text-sm font-medium">Upload Reference Image</p>
+                    <p className="text-xs">The correct drawing to compare against</p>
                   </div>
                 )}
               </div>
+              <input
+                ref={refFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleReferenceUpload}
+                className="hidden"
+              />
+              {referenceImage && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Click to change reference image
+                </p>
+              )}
             </div>
 
-            {/* Upload Section */}
+            {/* User Drawing Upload */}
             <div className="bg-card rounded-2xl p-6 border border-border shadow-card">
               <h3 className="font-mono font-semibold mb-4 flex items-center gap-2">
                 <Upload className="w-5 h-5 text-secondary" />
                 Your Drawing
               </h3>
               <div
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => userFileInputRef.current?.click()}
                 className="aspect-square rounded-xl bg-muted border-2 border-dashed border-border hover:border-primary/50 flex items-center justify-center cursor-pointer transition-all overflow-hidden group"
               >
-                {uploadedImage ? (
-                  <img src={uploadedImage} alt="Uploaded" className="w-full h-full object-contain" />
+                {userDrawing ? (
+                  <img src={userDrawing} alt="Your drawing" className="w-full h-full object-contain" />
                 ) : (
                   <div className="text-center text-muted-foreground p-4 group-hover:text-primary transition-colors">
                     <Upload className="w-12 h-12 mx-auto mb-2" />
@@ -136,10 +204,10 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
                 )}
               </div>
               <input
-                ref={fileInputRef}
+                ref={userFileInputRef}
                 type="file"
                 accept="image/*"
-                onChange={handleImageUpload}
+                onChange={handleUserDrawingUpload}
                 className="hidden"
               />
             </div>
@@ -151,7 +219,7 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
               variant="gradient"
               size="xl"
               onClick={evaluateDrawing}
-              disabled={!uploadedImage || isEvaluating}
+              disabled={!userDrawing || !referenceImage || isEvaluating}
               className="font-mono"
             >
               {isEvaluating ? (
@@ -200,20 +268,22 @@ const AIEvaluation = ({ referenceImage, drawingType, onBack }: AIEvaluationProps
                 </div>
 
                 {/* Errors */}
-                <div className="mb-6">
-                  <h4 className="font-mono font-semibold mb-3 flex items-center gap-2">
-                    <XCircle className="w-5 h-5 text-destructive" />
-                    Areas for Improvement
-                  </h4>
-                  <ul className="space-y-2">
-                    {result.errors.map((error, index) => (
-                      <li key={index} className="flex items-start gap-3 text-sm text-muted-foreground bg-destructive/5 rounded-lg p-3">
-                        <span className="text-destructive">•</span>
-                        {error}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {result.errors && result.errors.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="font-mono font-semibold mb-3 flex items-center gap-2">
+                      <XCircle className="w-5 h-5 text-destructive" />
+                      Areas for Improvement
+                    </h4>
+                    <ul className="space-y-2">
+                      {result.errors.map((error, index) => (
+                        <li key={index} className="flex items-start gap-3 text-sm text-muted-foreground bg-destructive/5 rounded-lg p-3">
+                          <span className="text-destructive">•</span>
+                          {error}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Feedback */}
                 <div className="bg-accent/5 rounded-xl p-4 border border-accent/20">

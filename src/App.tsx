@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Semester from "./pages/Semester";
 import DrawingContent from "./pages/DrawingContent";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/semester/:semesterId" element={<Semester />} />
           <Route path="/semester/:semesterId/:drawingType" element={<DrawingContent />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
