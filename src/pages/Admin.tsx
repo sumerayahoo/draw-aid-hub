@@ -38,25 +38,30 @@ const Admin = () => {
 
   useEffect(() => {
     checkAdminAccess();
+  }, []);
+
+  useEffect(() => {
     fetchContent();
   }, [selectedSemester, selectedType]);
 
   const checkAdminAccess = async () => {
-    const adminEmail = localStorage.getItem('admin_email');
-    if (!adminEmail) {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.user) {
       navigate('/admin-login');
       return;
     }
 
-    const { data: sessions } = await supabase
-      .from('admin_sessions')
-      .select('*')
-      .eq('user_email', adminEmail)
-      .gt('expires_at', new Date().toISOString())
-      .limit(1);
+    // Check if user has admin role
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', session.user.id)
+      .eq('role', 'admin')
+      .single();
 
-    if (!sessions || sessions.length === 0) {
-      localStorage.removeItem('admin_email');
+    if (!roleData) {
+      await supabase.auth.signOut();
       navigate('/admin-login');
     }
   };
@@ -79,14 +84,7 @@ const Admin = () => {
   };
 
   const handleLogout = async () => {
-    const adminEmail = localStorage.getItem('admin_email');
-    if (adminEmail) {
-      await supabase
-        .from('admin_sessions')
-        .delete()
-        .eq('user_email', adminEmail);
-    }
-    localStorage.removeItem('admin_email');
+    await supabase.auth.signOut();
     toast.success("Logged out successfully!");
     navigate('/admin-login');
   };
