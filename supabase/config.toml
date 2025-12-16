@@ -1,1 +1,4 @@
 project_id = "tmrhtrblinngsqvtkmix"
+
+[functions.evaluate-drawing]
+verify_jwt = false
