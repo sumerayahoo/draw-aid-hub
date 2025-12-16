@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
+import Branch from "./pages/Branch";
 import Semester from "./pages/Semester";
 import DrawingContent from "./pages/DrawingContent";
 import Admin from "./pages/Admin";
@@ -20,6 +21,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/branch/:branchCode" element={<Branch />} />
           <Route path="/semester/:semesterId" element={<Semester />} />
           <Route path="/semester/:semesterId/:drawingType" element={<DrawingContent />} />
           <Route path="/admin" element={<Admin />} />
