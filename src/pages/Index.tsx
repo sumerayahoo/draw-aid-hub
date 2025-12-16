@@ -61,13 +61,62 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Branch Selection */}
+      <section className="relative">
+        <div className="container mx-auto px-4 pb-12">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="text-center mb-12"
+          >
+            <h2 className="font-mono text-2xl md:text-3xl font-bold mb-2">
+              Select Your Branch
+            </h2>
+            <p className="text-muted-foreground">
+              Choose your engineering branch
+            </p>
+          </motion.div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 max-w-5xl mx-auto">
+            {[
+              { code: "CE", name: "Civil Engineering" },
+              { code: "CST", name: "Computer Science & Technology" },
+              { code: "DS", name: "Data Science" },
+              { code: "AI", name: "Artificial Intelligence" },
+              { code: "ENC", name: "Electronics & Communication" },
+            ].map((branch, index) => (
+              <motion.div
+                key={branch.code}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
+                whileHover={{ scale: 1.05, y: -5 }}
+                whileTap={{ scale: 0.98 }}
+                className="group relative cursor-pointer"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative p-4 md:p-6 rounded-xl bg-card border border-border hover:border-primary/50 transition-all duration-300 text-center">
+                  <div className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-3 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-mono font-bold text-sm md:text-base">
+                    {branch.code}
+                  </div>
+                  <h3 className="font-mono font-semibold text-xs md:text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                    {branch.name}
+                  </h3>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Semester Selection */}
       <section className="relative">
         <div className="container mx-auto px-4 pb-20">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
             className="text-center mb-12"
           >
             <h2 className="font-mono text-2xl md:text-3xl font-bold mb-2">
@@ -79,8 +128,8 @@ const Index = () => {
           </motion.div>
           
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <SemesterCard semester={1} delay={0.4} />
-            <SemesterCard semester={2} delay={0.5} />
+            <SemesterCard semester={1} delay={0.9} />
+            <SemesterCard semester={2} delay={1.0} />
           </div>
         </div>
       </section>
