@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
-import { FileText, Video, Box, Brain, ArrowRight, LucideIcon } from "lucide-react";
+import { FileText, Video, Box, Brain, ArrowRight, LucideIcon, Timer } from "lucide-react";
 
 interface ContentCardProps {
-  type: "pyqs" | "videos" | "objects" | "ai-evaluation";
+  type: "pyqs" | "videos" | "objects" | "ai-evaluation" | "ai-test";
   onClick: () => void;
   delay?: number;
 }
@@ -32,13 +32,18 @@ const contentConfig: Record<string, { title: string; description: string; icon: 
     icon: Brain,
     color: "primary",
   },
+  "ai-test": {
+    title: "AI Timed Test",
+    description: "Take a timed drawing test with AI evaluation",
+    icon: Timer,
+    color: "secondary",
+  },
 };
 
 const ContentCard = ({ type, onClick, delay = 0 }: ContentCardProps) => {
   const config = contentConfig[type];
   const Icon = config.icon;
-  const isAI = type === "ai-evaluation";
-
+  const isAI = type === "ai-evaluation" || type === "ai-test";
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -76,7 +81,7 @@ const ContentCard = ({ type, onClick, delay = 0 }: ContentCardProps) => {
           </p>
           
           <div className={`flex items-center text-${config.color} font-medium group-hover:gap-3 gap-2 transition-all duration-300 mt-auto`}>
-            <span className="text-sm">{isAI ? 'Start Evaluation' : 'View All'}</span>
+            <span className="text-sm">{type === "ai-test" ? 'Start Test' : isAI ? 'Start Evaluation' : 'View All'}</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
           </div>
         </div>

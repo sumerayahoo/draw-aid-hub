@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import ContentCard from "@/components/ContentCard";
 import AIEvaluation from "@/components/AIEvaluation";
+import AITest from "@/components/AITest";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileText, Video, Box, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const DrawingContent = () => {
   const { semesterId, drawingType } = useParams<{ semesterId: string; drawingType: string }>();
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
   const [showAIEvaluation, setShowAIEvaluation] = useState(false);
+  const [showAITest, setShowAITest] = useState(false);
   const [content, setContent] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -66,6 +68,15 @@ const DrawingContent = () => {
     );
   }
 
+  if (showAITest) {
+    return (
+      <AITest
+        drawingType={type}
+        onBack={() => setShowAITest(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -95,7 +106,7 @@ const DrawingContent = () => {
           </motion.div>
           
           {/* Content Cards */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6 max-w-6xl mx-auto">
             <ContentCard
               type="pyqs"
               onClick={() => setActiveDialog("pyqs")}
@@ -115,6 +126,11 @@ const DrawingContent = () => {
               type="ai-evaluation"
               onClick={() => setShowAIEvaluation(true)}
               delay={0.4}
+            />
+            <ContentCard
+              type="ai-test"
+              onClick={() => setShowAITest(true)}
+              delay={0.5}
             />
           </div>
         </div>
