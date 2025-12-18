@@ -29,7 +29,7 @@ const Index = () => {
               Engineering Drawing Platform
             </div>
             
-            <h1 className="font-mono text-4xl font-bold mb-6 text-primary md:text-7xl">Master Engineering Drawing<span className="gradient-text">Master Engineering Drawing </span>
+            <h1 className="font-mono text-4xl font-bold mb-6 text-primary md:text-7xl"> <span className="gradient-text">Master Engineering Drawing </span>
             </h1>
             
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
