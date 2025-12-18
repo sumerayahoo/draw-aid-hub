@@ -65,6 +65,42 @@ export type Database = {
         }
         Relationships: []
       }
+      test_history: {
+        Row: {
+          accuracy: number
+          created_at: string
+          drawing_type: string
+          duration_seconds: number
+          errors: string[] | null
+          feedback: string | null
+          id: string
+          score: number
+          user_identifier: string
+        }
+        Insert: {
+          accuracy: number
+          created_at?: string
+          drawing_type: string
+          duration_seconds: number
+          errors?: string[] | null
+          feedback?: string | null
+          id?: string
+          score: number
+          user_identifier: string
+        }
+        Update: {
+          accuracy?: number
+          created_at?: string
+          drawing_type?: string
+          duration_seconds?: number
+          errors?: string[] | null
+          feedback?: string | null
+          id?: string
+          score?: number
+          user_identifier?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

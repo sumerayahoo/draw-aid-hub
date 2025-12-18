@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import Header from "./Header";
 
 interface EvaluationResult {
@@ -14,27 +15,67 @@ interface EvaluationResult {
   feedback: string;
 }
 
+interface TestHistoryItem {
+  id: string;
+  created_at: string;
+  drawing_type: string;
+  duration_seconds: number;
+  score: number;
+  accuracy: number;
+  errors: string[];
+  feedback: string | null;
+}
+
 interface AITestProps {
   drawingType: string;
   onBack: () => void;
 }
 
+// Get or create a unique user identifier for anonymous users
+const getUserIdentifier = () => {
+  let identifier = localStorage.getItem('test_user_id');
+  if (!identifier) {
+    identifier = crypto.randomUUID();
+    localStorage.setItem('test_user_id', identifier);
+  }
+  return identifier;
+};
+
 const AITest = ({ drawingType, onBack }: AITestProps) => {
+  const { toast } = useToast();
+  
   // Timer state
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(30);
   const [seconds, setSeconds] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [initialDuration, setInitialDuration] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [testStarted, setTestStarted] = useState(false);
   const [testEnded, setTestEnded] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Evaluation state
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [userDrawing, setUserDrawing] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [result, setResult] = useState<EvaluationResult | null>(null);
+
+  // History state
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<TestHistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Initialize audio for timer alert
+  useEffect(() => {
+    audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2JkYyOl5qckJOIf35/gYWIi4yMjIyLi4qKiYmIiIeHh4aGhYWEhISDg4OCgoKBgYGAgIB/f39+fn59fX18fHx7e3t6enp5eXl4eHh3d3d2dnZ1dXV0dHRzc3NycnJxcXFwcHBvb29ubm5tbW1sbGxra2tqamppaWloaGhnZ2dmZmZlZWVkZGRjY2NiYmJhYWFgYGBfX19eXl5dXV1cXFxbW1taWlpZWVlYWFhXV1dWVlZVVVVUVFRTU1NSUlJRUVFQUFBPT09OTk5NTU1MTExLS0tKSkpJSUlISEhHR0dGRkZFRUVEREQ=');
+    return () => {
+      if (audioRef.current) {
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   // Timer logic
   useEffect(() => {
@@ -44,7 +85,32 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
           if (prev <= 1) {
             setIsRunning(false);
             setTestEnded(true);
+            // Play alert sound
+            if (audioRef.current) {
+              audioRef.current.play().catch(() => {});
+            }
+            // Show toast notification
+            toast({
+              title: "⏰ Time's Up!",
+              description: "Your test time has ended. Please upload your drawing for evaluation.",
+              variant: "default",
+            });
             return 0;
+          }
+          // Alert at 1 minute remaining
+          if (prev === 61) {
+            toast({
+              title: "⚠️ 1 Minute Remaining",
+              description: "Hurry up! Only 1 minute left.",
+              variant: "destructive",
+            });
+          }
+          // Alert at 5 minutes remaining
+          if (prev === 301) {
+            toast({
+              title: "⏱️ 5 Minutes Remaining",
+              description: "5 minutes left to complete your drawing.",
+            });
           }
           return prev - 1;
         });
@@ -54,12 +120,37 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isRunning, timeLeft]);
+  }, [isRunning, timeLeft, toast]);
+
+  const fetchHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('test_history')
+        .select('*')
+        .eq('user_identifier', getUserIdentifier())
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showHistory) {
+      fetchHistory();
+    }
+  }, [showHistory, fetchHistory]);
 
   const startTest = () => {
     const totalSeconds = hours * 3600 + minutes * 60 + seconds;
     if (totalSeconds > 0) {
       setTimeLeft(totalSeconds);
+      setInitialDuration(totalSeconds);
       setTestStarted(true);
       setIsRunning(true);
     }
@@ -74,6 +165,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     setTestStarted(false);
     setTestEnded(false);
     setTimeLeft(0);
+    setInitialDuration(0);
     setReferenceImage(null);
     setUserDrawing(null);
     setResult(null);
@@ -84,6 +176,16 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const handleReferenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +210,30 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     }
   };
 
+  const saveToHistory = async (evalResult: EvaluationResult) => {
+    try {
+      const { error } = await supabase
+        .from('test_history')
+        .insert({
+          drawing_type: drawingType,
+          duration_seconds: initialDuration,
+          score: evalResult.score,
+          accuracy: evalResult.accuracy,
+          errors: evalResult.errors,
+          feedback: evalResult.feedback,
+          user_identifier: getUserIdentifier()
+        });
+
+      if (error) throw error;
+      toast({
+        title: "Test Saved",
+        description: "Your test result has been saved to history.",
+      });
+    } catch (error) {
+      console.error('Error saving to history:', error);
+    }
+  };
+
   const evaluateDrawing = async () => {
     if (!referenceImage || !userDrawing) return;
 
@@ -123,6 +249,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
 
       if (error) throw error;
       setResult(data);
+      await saveToHistory(data);
     } catch (error) {
       console.error('Evaluation error:', error);
       setResult({
@@ -136,11 +263,184 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     }
   };
 
+  const exportResult = (historyItem?: TestHistoryItem) => {
+    const data = historyItem || (result ? {
+      drawing_type: drawingType,
+      duration_seconds: initialDuration,
+      score: result.score,
+      accuracy: result.accuracy,
+      errors: result.errors,
+      feedback: result.feedback,
+      created_at: new Date().toISOString()
+    } : null);
+
+    if (!data) return;
+
+    const exportData = {
+      testDate: formatDate(data.created_at || new Date().toISOString()),
+      drawingType: data.drawing_type,
+      duration: formatTime(data.duration_seconds),
+      score: `${data.score}/10`,
+      accuracy: `${data.accuracy}%`,
+      errors: data.errors,
+      feedback: data.feedback
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test-result-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Complete",
+      description: "Test result downloaded successfully.",
+    });
+  };
+
+  const deleteHistoryItem = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('test_history')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setHistory(prev => prev.filter(item => item.id !== id));
+      toast({
+        title: "Deleted",
+        description: "Test history item removed.",
+      });
+    } catch (error) {
+      console.error('Error deleting history:', error);
+    }
+  };
+
+  const clearAllHistory = async () => {
+    try {
+      const { error } = await supabase
+        .from('test_history')
+        .delete()
+        .eq('user_identifier', getUserIdentifier());
+
+      if (error) throw error;
+      setHistory([]);
+      toast({
+        title: "History Cleared",
+        description: "All test history has been deleted.",
+      });
+    } catch (error) {
+      console.error('Error clearing history:', error);
+    }
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 8) return "text-green-500";
     if (score >= 5) return "text-yellow-500";
     return "text-red-500";
   };
+
+  // History View
+  if (showHistory) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="relative">
+          <div className="absolute inset-0 blueprint-grid opacity-30" />
+          <div className="relative container mx-auto px-4 py-12">
+            <motion.button
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={() => setShowHistory(false)}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Test</span>
+            </motion.button>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-8"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary mb-4">
+                <History className="w-4 h-4" />
+                <span className="text-sm font-mono">Test History</span>
+              </div>
+              <h1 className="font-mono text-3xl md:text-4xl font-bold mb-3">
+                Your Past Tests
+              </h1>
+            </motion.div>
+
+            {history.length > 0 && (
+              <div className="flex justify-end mb-4 max-w-4xl mx-auto">
+                <Button variant="destructive" size="sm" onClick={clearAllHistory}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Clear All History
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-4 max-w-4xl mx-auto">
+              {isLoadingHistory ? (
+                <div className="text-center py-12">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : history.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  No test history yet. Complete a test to see your results here.
+                </div>
+              ) : (
+                history.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-card rounded-xl p-6 border border-border/50"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                      <div>
+                        <span className="text-sm text-muted-foreground">{formatDate(item.created_at)}</span>
+                        <h3 className="font-semibold capitalize">{item.drawing_type} Drawing</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-2xl font-bold font-mono ${getScoreColor(item.score)}`}>
+                          {item.score}/10
+                        </span>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="font-mono">{item.accuracy}%</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                      <Clock className="w-4 h-4" />
+                      <span>Duration: {formatTime(item.duration_seconds)}</span>
+                    </div>
+                    {item.feedback && (
+                      <p className="text-sm text-muted-foreground mb-4">{item.feedback}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => exportResult(item)}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => deleteHistoryItem(item.id)}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -151,15 +451,21 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
 
         <div className="relative container mx-auto px-4 py-12">
           {/* Back Button */}
-          <motion.button
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            onClick={onBack}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back to Resources</span>
-          </motion.button>
+          <div className="flex items-center justify-between mb-8">
+            <motion.button
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={onBack}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Resources</span>
+            </motion.button>
+            <Button variant="outline" onClick={() => setShowHistory(true)}>
+              <History className="w-4 h-4 mr-2" />
+              View History
+            </Button>
+          </div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -189,6 +495,11 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
                 <div className="flex items-center justify-center gap-2 mb-6">
                   <Clock className="w-6 h-6 text-primary" />
                   <h2 className="font-mono text-xl font-semibold">Set Timer</h2>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 mb-4 text-sm text-muted-foreground">
+                  <Bell className="w-4 h-4" />
+                  <span>Alerts at 5 min, 1 min, and when time ends</span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-8">
@@ -478,10 +789,16 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
                     </p>
                   </div>
 
-                  <Button onClick={resetTest} className="w-full">
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Take Another Test
-                  </Button>
+                  <div className="flex gap-4">
+                    <Button variant="outline" onClick={() => exportResult()} className="flex-1">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export Result
+                    </Button>
+                    <Button onClick={resetTest} className="flex-1">
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Take Another Test
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             )}
