@@ -1,12 +1,38 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Compass } from "lucide-react";
+import { ChevronLeft, Compass, LogOut, User } from "lucide-react";
 import { Button } from "./ui/button";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === "/";
+  const { email, branch, isLoggedIn, logout, isLoading } = useStudentAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
+
+  const getBranchLabel = (branchValue: string) => {
+    const branches: Record<string, string> = {
+      civil: "Civil Engineering",
+      mechanical: "Mechanical Engineering",
+      electrical: "Electrical Engineering",
+      computer: "Computer Engineering",
+      electronics: "Electronics Engineering",
+    };
+    return branches[branchValue] || branchValue;
+  };
 
   return (
     <motion.header
@@ -49,8 +75,42 @@ const Header = () => {
           >
             Home
           </Button>
+          
+          {!isLoading && isLoggedIn ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="tech" size="sm" className="font-mono text-sm gap-2">
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline">{email.split("@")[0]}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium">{email}</p>
+                    <p className="text-xs text-muted-foreground">{getBranchLabel(branch)}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : !isLoading ? (
+            <Button
+              variant="tech"
+              size="sm"
+              onClick={() => navigate("/student-login")}
+              className="font-mono text-sm"
+            >
+              Student Login
+            </Button>
+          ) : null}
+          
           <Button
-            variant="tech"
+            variant="outline"
             size="sm"
             onClick={() => navigate("/admin")}
             className="font-mono text-sm"
