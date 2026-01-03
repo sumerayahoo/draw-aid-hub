@@ -1,0 +1,318 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GraduationCap, Loader2, Mail, Lock, Building2 } from "lucide-react";
+import { toast } from "sonner";
+import Header from "@/components/Header";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const registerSchema = loginSchema.extend({
+  branch: z.enum(["civil", "mechanical", "electrical", "computer", "electronics"], {
+    required_error: "Please select a branch",
+  }),
+});
+
+const branches = [
+  { value: "civil", label: "Civil Engineering" },
+  { value: "mechanical", label: "Mechanical Engineering" },
+  { value: "electrical", label: "Electrical Engineering" },
+  { value: "computer", label: "Computer Engineering" },
+  { value: "electronics", label: "Electronics Engineering" },
+];
+
+const StudentLogin = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [branch, setBranch] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [activeTab, setActiveTab] = useState("login");
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  const checkExistingSession = async () => {
+    try {
+      const sessionToken = localStorage.getItem("student_session_token");
+      if (!sessionToken) {
+        setCheckingSession(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("student-auth", {
+        body: { action: "verify", sessionToken },
+      });
+
+      if (data?.valid) {
+        // Store student info
+        localStorage.setItem("student_email", data.email);
+        localStorage.setItem("student_branch", data.branch);
+        navigate("/");
+      } else {
+        // Clear invalid session
+        localStorage.removeItem("student_session_token");
+        localStorage.removeItem("student_email");
+        localStorage.removeItem("student_branch");
+      }
+    } catch (error) {
+      console.error("Session verification error:", error);
+    } finally {
+      setCheckingSession(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      loginSchema.parse({ email, password });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        toast.error(err.errors[0].message);
+        return;
+      }
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("student-auth", {
+        body: { action: "login", email, password },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      // Store session
+      localStorage.setItem("student_session_token", data.sessionToken);
+      localStorage.setItem("student_email", data.email);
+      localStorage.setItem("student_branch", data.branch);
+
+      toast.success("Logged in successfully!");
+      navigate("/");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast.error(error.message || "Failed to login");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      registerSchema.parse({ email, password, branch });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        toast.error(err.errors[0].message);
+        return;
+      }
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("student-auth", {
+        body: { action: "register", email, password, branch },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      // Store session
+      localStorage.setItem("student_session_token", data.sessionToken);
+      localStorage.setItem("student_email", data.email);
+      localStorage.setItem("student_branch", data.branch);
+
+      toast.success("Registration successful!");
+      navigate("/");
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      toast.error(error.message || "Failed to register");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <div className="relative">
+        <div className="absolute inset-0 blueprint-dots opacity-20" />
+        
+        <div className="relative container mx-auto px-4 py-12 flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-md"
+          >
+            <Card className="border-border/50 shadow-card">
+              <CardHeader className="text-center">
+                <div className="mx-auto p-3 rounded-xl bg-secondary/10 w-fit mb-4">
+                  <GraduationCap className="w-8 h-8 text-secondary" />
+                </div>
+                <CardTitle className="font-mono text-2xl">Student Portal</CardTitle>
+                <CardDescription>
+                  Access learning resources for your branch
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid w-full grid-cols-2 mb-6">
+                    <TabsTrigger value="login">Login</TabsTrigger>
+                    <TabsTrigger value="register">Register</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="login">
+                    <form onSubmit={handleLogin} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="login-email" className="flex items-center gap-2">
+                          <Mail className="w-4 h-4" />
+                          Email
+                        </Label>
+                        <Input
+                          id="login-email"
+                          type="email"
+                          placeholder="student@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="login-password" className="flex items-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          Password
+                        </Label>
+                        <Input
+                          id="login-password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        variant="gradient"
+                        className="w-full"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Logging in...
+                          </>
+                        ) : (
+                          "Login"
+                        )}
+                      </Button>
+                    </form>
+                  </TabsContent>
+
+                  <TabsContent value="register">
+                    <form onSubmit={handleRegister} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="register-email" className="flex items-center gap-2">
+                          <Mail className="w-4 h-4" />
+                          Email
+                        </Label>
+                        <Input
+                          id="register-email"
+                          type="email"
+                          placeholder="student@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="register-password" className="flex items-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          Password
+                        </Label>
+                        <Input
+                          id="register-password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={6}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum 6 characters
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="branch" className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          Branch
+                        </Label>
+                        <Select value={branch} onValueChange={setBranch} required>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select your branch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branches.map((b) => (
+                              <SelectItem key={b.value} value={b.value}>
+                                {b.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="submit"
+                        variant="gradient"
+                        className="w-full"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Registering...
+                          </>
+                        ) : (
+                          "Register"
+                        )}
+                      </Button>
+                    </form>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StudentLogin;

@@ -65,6 +65,57 @@ export type Database = {
         }
         Relationships: []
       }
+      student_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          session_token: string
+          student_email: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_token: string
+          student_email: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_token?: string
+          student_email?: string
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          branch: string
+          created_at: string
+          email: string
+          id: string
+          last_login: string | null
+          password_hash: string
+        }
+        Insert: {
+          branch: string
+          created_at?: string
+          email: string
+          id?: string
+          last_login?: string | null
+          password_hash: string
+        }
+        Update: {
+          branch?: string
+          created_at?: string
+          email?: string
+          id?: string
+          last_login?: string | null
+          password_hash?: string
+        }
+        Relationships: []
+      }
       test_history: {
         Row: {
           accuracy: number
