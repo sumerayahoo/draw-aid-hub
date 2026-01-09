@@ -35,6 +35,33 @@ export type Database = {
         }
         Relationships: []
       }
+      attendance: {
+        Row: {
+          branch: string
+          date: string
+          id: string
+          marked_at: string
+          marked_by: string
+          student_email: string
+        }
+        Insert: {
+          branch: string
+          date?: string
+          id?: string
+          marked_at?: string
+          marked_by: string
+          student_email: string
+        }
+        Update: {
+          branch?: string
+          date?: string
+          id?: string
+          marked_at?: string
+          marked_by?: string
+          student_email?: string
+        }
+        Relationships: []
+      }
       content: {
         Row: {
           content_type: string
@@ -65,6 +92,33 @@ export type Database = {
         }
         Relationships: []
       }
+      student_password_reset_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          student_email: string
+          token: string
+          used: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          student_email: string
+          token: string
+          used?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          student_email?: string
+          token?: string
+          used?: boolean | null
+        }
+        Relationships: []
+      }
       student_sessions: {
         Row: {
           created_at: string
@@ -91,28 +145,46 @@ export type Database = {
       }
       students: {
         Row: {
+          avatar_url: string | null
           branch: string
           created_at: string
           email: string
+          extra_info: string | null
+          full_name: string | null
+          goals: string | null
           id: string
+          interests: string | null
           last_login: string | null
           password_hash: string
+          points: number | null
         }
         Insert: {
+          avatar_url?: string | null
           branch: string
           created_at?: string
           email: string
+          extra_info?: string | null
+          full_name?: string | null
+          goals?: string | null
           id?: string
+          interests?: string | null
           last_login?: string | null
           password_hash: string
+          points?: number | null
         }
         Update: {
+          avatar_url?: string | null
           branch?: string
           created_at?: string
           email?: string
+          extra_info?: string | null
+          full_name?: string | null
+          goals?: string | null
           id?: string
+          interests?: string | null
           last_login?: string | null
           password_hash?: string
+          points?: number | null
         }
         Relationships: []
       }
