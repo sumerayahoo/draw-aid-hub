@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Video, Box, Image, Upload, Plus, Trash2, Shield, LogOut, Loader2 } from "lucide-react";
+import { FileText, Video, Box, Image, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import AdminAttendance from "@/components/AdminAttendance";
 
 interface ContentItem {
   id: string;
@@ -45,25 +46,12 @@ const Admin = () => {
   }, [selectedSemester, selectedType]);
 
   const checkAdminAccess = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session?.user) {
+    const adminSession = localStorage.getItem("admin_session");
+    if (adminSession !== "active") {
       navigate('/admin-login');
       return;
     }
-
-    // Check if user has admin role
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', session.user.id)
-      .eq('role', 'admin')
-      .single();
-
-    if (!roleData) {
-      await supabase.auth.signOut();
-      navigate('/admin-login');
-    }
+    setIsLoading(false);
   };
 
   const fetchContent = async () => {
@@ -84,7 +72,7 @@ const Admin = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem("admin_session");
     toast.success("Logged out successfully!");
     navigate('/admin-login');
   };

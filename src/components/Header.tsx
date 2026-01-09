@@ -25,11 +25,11 @@ const Header = () => {
 
   const getBranchLabel = (branchValue: string) => {
     const branches: Record<string, string> = {
-      civil: "Civil Engineering",
-      mechanical: "Mechanical Engineering",
-      electrical: "Electrical Engineering",
-      computer: "Computer Engineering",
-      electronics: "Electronics Engineering",
+      computer_engineering: "Computer Engineering",
+      cst: "Computer Science and Technology",
+      data_science: "Data Science",
+      ai: "Artificial Intelligence",
+      ece: "Electronics and Communication",
     };
     return branches[branchValue] || branchValue;
   };
