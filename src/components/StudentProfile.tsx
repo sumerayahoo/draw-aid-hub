@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Save, Loader2, Camera } from "lucide-react";
+import { User, Save, Loader2, Camera, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 interface StudentData {
   email: string;
+  username?: string;
   branch: string;
   fullName: string;
   avatarUrl: string;
@@ -36,6 +37,8 @@ const branches = [
 
 const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     fullName: studentData.fullName || "",
     branch: studentData.branch || "",
@@ -44,6 +47,51 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
     goals: studentData.goals || "",
     extraInfo: studentData.extraInfo || "",
   });
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `avatars/${studentData.email.replace(/[^a-z0-9]/gi, "_")}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from("content")
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("content")
+        .getPublicUrl(fileName);
+
+      setFormData(prev => ({ ...prev, avatarUrl: publicUrl }));
+      toast.success("Avatar uploaded! Click Save to apply changes.");
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast.error(error.message || "Failed to upload avatar");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     const sessionToken = localStorage.getItem("student_session_token");
@@ -89,24 +137,54 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
       <CardContent>
         <div className="space-y-6">
           {/* Avatar Section */}
-          <div className="flex items-center gap-6">
-            <Avatar className="w-20 h-20">
-              <AvatarImage src={formData.avatarUrl} alt="Profile" />
-              <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground">
-                {formData.fullName?.[0] || studentData.email[0].toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <Label htmlFor="avatarUrl">Profile Picture URL</Label>
-              <Input
-                id="avatarUrl"
-                placeholder="https://example.com/avatar.jpg"
-                value={formData.avatarUrl}
-                onChange={(e) => setFormData(prev => ({ ...prev, avatarUrl: e.target.value }))}
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="relative group">
+              <Avatar 
+                className="w-24 h-24 cursor-pointer transition-opacity group-hover:opacity-80"
+                onClick={handleAvatarClick}
+              >
+                <AvatarImage src={formData.avatarUrl} alt="Profile" />
+                <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground">
+                  {formData.fullName?.[0] || studentData.email[0].toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div 
+                className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={handleAvatarClick}
+              >
+                {isUploading ? (
+                  <Loader2 className="w-6 h-6 text-white animate-spin" />
+                ) : (
+                  <Camera className="w-6 h-6 text-white" />
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
               />
+            </div>
+            <div className="text-center sm:text-left">
+              <p className="text-sm font-medium">Profile Picture</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Enter a URL to your profile picture
+                Click on the avatar to upload a new image
               </p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2 gap-2"
+                onClick={handleAvatarClick}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                Upload Photo
+              </Button>
             </div>
           </div>
 
@@ -122,14 +200,24 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                value={studentData.email}
+                id="username"
+                value={studentData.username || ""}
                 disabled
                 className="bg-muted"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              value={studentData.email}
+              disabled
+              className="bg-muted"
+            />
           </div>
 
           {/* Branch Selection */}

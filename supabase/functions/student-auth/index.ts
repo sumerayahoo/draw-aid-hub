@@ -37,14 +37,15 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, email, password, branch, sessionToken, newPassword, resetToken, profile } = await req.json();
+    const body = await req.json();
+    const { action, email, password, branch, username, sessionToken, newPassword, resetToken, profile, score } = body;
 
     const validBranches = ['computer_engineering', 'cst', 'data_science', 'ai', 'ece'];
 
     if (action === 'register') {
-      if (!email || !password || !branch) {
+      if (!email || !password || !branch || !username) {
         return new Response(
-          JSON.stringify({ error: 'Email, password, and branch are required' }),
+          JSON.stringify({ error: 'Email, password, username, and branch are required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -54,6 +55,15 @@ serve(async (req) => {
       if (!emailRegex.test(email)) {
         return new Response(
           JSON.stringify({ error: 'Invalid email format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate username (alphanumeric, 3-20 chars)
+      const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+      if (!usernameRegex.test(username)) {
+        return new Response(
+          JSON.stringify({ error: 'Username must be 3-20 characters (letters, numbers, underscore only)' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -75,15 +85,29 @@ serve(async (req) => {
       }
 
       // Check if email already exists
-      const { data: existingStudent } = await supabase
+      const { data: existingEmail } = await supabase
         .from('students')
         .select('id')
         .eq('email', email.toLowerCase())
         .single();
 
-      if (existingStudent) {
+      if (existingEmail) {
         return new Response(
           JSON.stringify({ error: 'Email already registered' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if username already exists
+      const { data: existingUsername } = await supabase
+        .from('students')
+        .select('id')
+        .eq('username', username.toLowerCase())
+        .single();
+
+      if (existingUsername) {
+        return new Response(
+          JSON.stringify({ error: 'Username already taken' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -94,6 +118,7 @@ serve(async (req) => {
         .from('students')
         .insert({
           email: email.toLowerCase(),
+          username: username.toLowerCase(),
           password_hash: passwordHash,
           branch: branch,
           points: 0,
@@ -122,6 +147,7 @@ serve(async (req) => {
           message: 'Registration successful',
           sessionToken: newSessionToken,
           email: email.toLowerCase(),
+          username: username.toLowerCase(),
           branch: branch 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -129,25 +155,32 @@ serve(async (req) => {
     }
 
     if (action === 'login') {
-      if (!email || !password) {
+      if (!password || (!email && !username)) {
         return new Response(
-          JSON.stringify({ error: 'Email and password are required' }),
+          JSON.stringify({ error: 'Email/Username and password are required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       const passwordHash = await hashPassword(password);
 
-      const { data: student, error: fetchError } = await supabase
+      // Try login with email or username
+      let query = supabase
         .from('students')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .eq('password_hash', passwordHash)
-        .single();
+        .select('id, email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
+        .eq('password_hash', passwordHash);
+
+      if (email) {
+        query = query.eq('email', email.toLowerCase());
+      } else if (username) {
+        query = query.eq('username', username.toLowerCase());
+      }
+
+      const { data: student, error: fetchError } = await query.single();
 
       if (fetchError || !student) {
         return new Response(
-          JSON.stringify({ error: 'Invalid email or password' }),
+          JSON.stringify({ error: 'Invalid credentials' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -172,6 +205,7 @@ serve(async (req) => {
           success: true,
           sessionToken: newSessionToken,
           email: student.email,
+          username: student.username,
           branch: student.branch 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -200,10 +234,10 @@ serve(async (req) => {
         );
       }
 
-      // Get student details
+      // Get student details (excluding password_hash)
       const { data: student } = await supabase
         .from('students')
-        .select('email, branch, full_name, avatar_url, interests, goals, extra_info, points')
+        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
         .eq('email', session.student_email)
         .single();
 
@@ -211,6 +245,7 @@ serve(async (req) => {
         JSON.stringify({ 
           valid: true,
           email: student?.email,
+          username: student?.username,
           branch: student?.branch,
           fullName: student?.full_name,
           avatarUrl: student?.avatar_url,
@@ -409,9 +444,10 @@ serve(async (req) => {
         );
       }
 
+      // Exclude password_hash from response
       const { data: student } = await supabase
         .from('students')
-        .select('*')
+        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
         .eq('email', session.student_email)
         .single();
 
@@ -420,6 +456,7 @@ serve(async (req) => {
           success: true,
           profile: {
             email: student?.email,
+            username: student?.username,
             branch: student?.branch,
             fullName: student?.full_name,
             avatarUrl: student?.avatar_url,
@@ -456,9 +493,10 @@ serve(async (req) => {
         );
       }
 
+      // Filter out admin email from response for security
       const { data: attendance } = await supabase
         .from('attendance')
-        .select('*')
+        .select('id, date, branch, marked_at')
         .eq('student_email', session.student_email)
         .order('date', { ascending: false });
 
@@ -475,8 +513,6 @@ serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      const { score } = await req.json();
       
       // Verify session
       const { data: session } = await supabase
@@ -511,8 +547,9 @@ serve(async (req) => {
           .eq('email', session.student_email)
           .single();
 
-        const newPoints = (student?.points || 0) + pointsToAdd;
-        
+        const currentPoints = student?.points || 0;
+        const newPoints = currentPoints + pointsToAdd;
+
         await supabase
           .from('students')
           .update({ points: newPoints })
@@ -525,7 +562,51 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, pointsAdded: 0 }),
+        JSON.stringify({ success: true, pointsAdded: 0, message: 'Score too low to earn points' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get_logged_in_students') {
+      // This is for admin use - get students with active sessions grouped by branch
+      const { data: activeSessions } = await supabase
+        .from('student_sessions')
+        .select('student_email')
+        .gt('expires_at', new Date().toISOString());
+
+      if (!activeSessions || activeSessions.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, students: {} }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const emails = [...new Set(activeSessions.map(s => s.student_email))];
+
+      // Get student details (excluding password_hash)
+      const { data: students } = await supabase
+        .from('students')
+        .select('email, username, branch, full_name, avatar_url, last_login, points')
+        .in('email', emails);
+
+      // Group by branch
+      const groupedByBranch: Record<string, any[]> = {};
+      students?.forEach(student => {
+        if (!groupedByBranch[student.branch]) {
+          groupedByBranch[student.branch] = [];
+        }
+        groupedByBranch[student.branch].push({
+          email: student.email,
+          username: student.username,
+          fullName: student.full_name,
+          avatarUrl: student.avatar_url,
+          lastLogin: student.last_login,
+          points: student.points || 0,
+        });
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, students: groupedByBranch }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

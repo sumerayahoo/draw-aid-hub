@@ -6,9 +6,10 @@ import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   User, BookOpen, Award, Calendar, Loader2, LogOut, 
-  Star, Target, Lightbulb, FileText, ChevronRight 
+  Star, Target, Lightbulb
 } from "lucide-react";
 import { toast } from "sonner";
 import StudentProfile from "@/components/StudentProfile";
@@ -16,6 +17,7 @@ import StudentAttendance from "@/components/StudentAttendance";
 
 interface StudentData {
   email: string;
+  username?: string;
   branch: string;
   fullName: string;
   avatarUrl: string;
@@ -66,6 +68,7 @@ const StudentDashboard = () => {
       localStorage.removeItem("student_session_token");
       localStorage.removeItem("student_email");
       localStorage.removeItem("student_branch");
+      localStorage.removeItem("student_username");
       navigate("/student-login");
     } finally {
       setIsLoading(false);
@@ -86,6 +89,7 @@ const StudentDashboard = () => {
     localStorage.removeItem("student_session_token");
     localStorage.removeItem("student_email");
     localStorage.removeItem("student_branch");
+    localStorage.removeItem("student_username");
     toast.success("Logged out successfully!");
     navigate("/student-login");
   };
@@ -118,21 +122,19 @@ const StudentDashboard = () => {
           >
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground text-2xl font-bold">
-                  {studentData.avatarUrl ? (
-                    <img 
-                      src={studentData.avatarUrl} 
-                      alt="Avatar" 
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    studentData.fullName?.[0] || studentData.email[0].toUpperCase()
-                  )}
-                </div>
+                <Avatar className="w-16 h-16">
+                  <AvatarImage src={studentData.avatarUrl} alt="Avatar" />
+                  <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground">
+                    {studentData.fullName?.[0] || studentData.username?.[0] || studentData.email[0].toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <h1 className="font-mono text-2xl font-bold">
-                    {studentData.fullName || "Welcome, Student!"}
+                    {studentData.fullName || studentData.username || "Welcome, Student!"}
                   </h1>
+                  {studentData.username && (
+                    <p className="text-sm text-muted-foreground">@{studentData.username}</p>
+                  )}
                   <p className="text-muted-foreground">
                     {branches[studentData.branch] || studentData.branch}
                   </p>
