@@ -8,17 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GraduationCap, Loader2, Mail, Lock, Building2, KeyRound } from "lucide-react";
+import { GraduationCap, Loader2, Mail, Lock, Building2, KeyRound, User } from "lucide-react";
 import { toast } from "sonner";
 import Header from "@/components/Header";
 import { z } from "zod";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email format"),
+  identifier: z.string().min(1, "Email or username is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-const registerSchema = loginSchema.extend({
+const registerSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be at most 20 characters").regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
   branch: z.enum(["computer_engineering", "cst", "data_science", "ai", "ece"], {
     required_error: "Please select a branch",
   }),
@@ -34,6 +37,8 @@ const branches = [
 
 const StudentLogin = () => {
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState(""); // For login - can be email or username
   const [password, setPassword] = useState("");
   const [branch, setBranch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -65,11 +70,13 @@ const StudentLogin = () => {
       if (data?.valid) {
         localStorage.setItem("student_email", data.email);
         localStorage.setItem("student_branch", data.branch);
+        localStorage.setItem("student_username", data.username || "");
         navigate("/student-dashboard");
       } else {
         localStorage.removeItem("student_session_token");
         localStorage.removeItem("student_email");
         localStorage.removeItem("student_branch");
+        localStorage.removeItem("student_username");
       }
     } catch (error) {
       console.error("Session verification error:", error);
@@ -82,7 +89,7 @@ const StudentLogin = () => {
     e.preventDefault();
     
     try {
-      loginSchema.parse({ email, password });
+      loginSchema.parse({ identifier, password });
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast.error(err.errors[0].message);
@@ -93,8 +100,14 @@ const StudentLogin = () => {
     setIsLoading(true);
 
     try {
+      // Determine if identifier is email or username
+      const isEmail = identifier.includes("@");
       const { data, error } = await supabase.functions.invoke("student-auth", {
-        body: { action: "login", email, password },
+        body: { 
+          action: "login", 
+          ...(isEmail ? { email: identifier } : { username: identifier }),
+          password 
+        },
       });
 
       if (error) throw new Error(error.message);
@@ -103,6 +116,7 @@ const StudentLogin = () => {
       localStorage.setItem("student_session_token", data.sessionToken);
       localStorage.setItem("student_email", data.email);
       localStorage.setItem("student_branch", data.branch);
+      localStorage.setItem("student_username", data.username || "");
 
       toast.success("Logged in successfully!");
       navigate("/student-dashboard");
@@ -118,7 +132,7 @@ const StudentLogin = () => {
     e.preventDefault();
     
     try {
-      registerSchema.parse({ email, password, branch });
+      registerSchema.parse({ email, username, password, branch });
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast.error(err.errors[0].message);
@@ -130,7 +144,7 @@ const StudentLogin = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("student-auth", {
-        body: { action: "register", email, password, branch },
+        body: { action: "register", email, username, password, branch },
       });
 
       if (error) throw new Error(error.message);
@@ -139,6 +153,7 @@ const StudentLogin = () => {
       localStorage.setItem("student_session_token", data.sessionToken);
       localStorage.setItem("student_email", data.email);
       localStorage.setItem("student_branch", data.branch);
+      localStorage.setItem("student_username", data.username || "");
 
       toast.success("Registration successful!");
       navigate("/student-dashboard");
@@ -355,16 +370,16 @@ const StudentLogin = () => {
                     <TabsContent value="login">
                       <form onSubmit={handleLogin} className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="login-email" className="flex items-center gap-2">
-                            <Mail className="w-4 h-4" />
-                            Email
+                          <Label htmlFor="login-identifier" className="flex items-center gap-2">
+                            <User className="w-4 h-4" />
+                            Email or Username
                           </Label>
                           <Input
-                            id="login-email"
-                            type="email"
-                            placeholder="student@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            id="login-identifier"
+                            type="text"
+                            placeholder="email@example.com or username"
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
                             required
                           />
                         </div>
@@ -410,6 +425,25 @@ const StudentLogin = () => {
 
                     <TabsContent value="register">
                       <form onSubmit={handleRegister} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="register-username" className="flex items-center gap-2">
+                            <User className="w-4 h-4" />
+                            Username
+                          </Label>
+                          <Input
+                            id="register-username"
+                            type="text"
+                            placeholder="your_username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            required
+                            minLength={3}
+                            maxLength={20}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            3-20 characters, letters, numbers, underscore only
+                          </p>
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="register-email" className="flex items-center gap-2">
                             <Mail className="w-4 h-4" />

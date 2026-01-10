@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Video, Box, Image, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar } from "lucide-react";
+import { FileText, Video, Box, Image, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users } from "lucide-react";
 import { toast } from "sonner";
 import AdminAttendance from "@/components/AdminAttendance";
+import LoggedInStudents from "@/components/LoggedInStudents";
 
 interface ContentItem {
   id: string;
@@ -302,8 +303,16 @@ const Admin = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <Tabs defaultValue="pyqs" className="w-full">
-              <TabsList className="grid grid-cols-4 max-w-2xl mb-8">
+            <Tabs defaultValue="students" className="w-full">
+              <TabsList className="grid grid-cols-6 max-w-4xl mb-8">
+                <TabsTrigger value="students" className="gap-2">
+                  <Users className="w-4 h-4" />
+                  <span className="hidden sm:inline">Students</span>
+                </TabsTrigger>
+                <TabsTrigger value="attendance" className="gap-2">
+                  <Calendar className="w-4 h-4" />
+                  <span className="hidden sm:inline">Attendance</span>
+                </TabsTrigger>
                 <TabsTrigger value="pyqs" className="gap-2">
                   <FileText className="w-4 h-4" />
                   <span className="hidden sm:inline">PYQs</span>
@@ -321,6 +330,16 @@ const Admin = () => {
                   <span className="hidden sm:inline">Reference</span>
                 </TabsTrigger>
               </TabsList>
+
+              {/* Students Tab */}
+              <TabsContent value="students">
+                <LoggedInStudents />
+              </TabsContent>
+
+              {/* Attendance Tab */}
+              <TabsContent value="attendance">
+                <AdminAttendance />
+              </TabsContent>
 
               {/* PYQs Tab */}
               <TabsContent value="pyqs">
