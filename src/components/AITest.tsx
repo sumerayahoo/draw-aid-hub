@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +41,11 @@ const getUserIdentifier = () => {
   return identifier;
 };
 
+// Check if user is logged in as student
+const getStudentSession = () => {
+  return localStorage.getItem('student_session_token');
+};
+
 const AITest = ({ drawingType, onBack }: AITestProps) => {
   const { toast } = useToast();
   
@@ -61,6 +66,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
   const [userDrawing, setUserDrawing] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [pointsEarned, setPointsEarned] = useState<number | null>(null);
 
   // History state
   const [showHistory, setShowHistory] = useState(false);
@@ -169,6 +175,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     setReferenceImage(null);
     setUserDrawing(null);
     setResult(null);
+    setPointsEarned(null);
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -234,6 +241,32 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     }
   };
 
+  const addPointsForScore = async (score: number) => {
+    const sessionToken = getStudentSession();
+    if (!sessionToken) {
+      // Not logged in as student, skip points
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('student-auth', {
+        body: { action: 'add_points', sessionToken, score }
+      });
+
+      if (error) throw error;
+      
+      if (data?.pointsAdded > 0) {
+        setPointsEarned(data.pointsAdded);
+        toast({
+          title: "🎉 Points Earned!",
+          description: `You earned ${data.pointsAdded} points! Total: ${data.totalPoints}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error adding points:', error);
+    }
+  };
+
   const evaluateDrawing = async () => {
     if (!referenceImage || !userDrawing) return;
 
@@ -250,6 +283,11 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
       if (error) throw error;
       setResult(data);
       await saveToHistory(data);
+      
+      // Add points if logged in as student and score is above 6
+      if (data.score > 6) {
+        await addPointsForScore(data.score);
+      }
     } catch (error) {
       console.error('Evaluation error:', error);
       setResult({
@@ -482,6 +520,12 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
             <p className="text-muted-foreground max-w-xl mx-auto">
               Set a timer, complete your drawing, then upload for AI evaluation
             </p>
+            {getStudentSession() && (
+              <p className="text-sm text-primary mt-2 flex items-center justify-center gap-1">
+                <Star className="w-4 h-4" />
+                Logged in - earn points for scores above 6!
+              </p>
+            )}
           </motion.div>
 
           {/* Timer Setup - Before test starts */}
@@ -741,6 +785,17 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
                   <h2 className="font-mono text-2xl font-bold mb-6 text-center">
                     Test Results
                   </h2>
+
+                  {/* Points earned banner */}
+                  {pointsEarned !== null && pointsEarned > 0 && (
+                    <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl p-4 mb-6 text-center">
+                      <div className="flex items-center justify-center gap-2 text-yellow-600">
+                        <Star className="w-6 h-6 fill-yellow-500" />
+                        <span className="text-xl font-bold">+{pointsEarned} Points Earned!</span>
+                        <Star className="w-6 h-6 fill-yellow-500" />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid md:grid-cols-2 gap-6 mb-8">
                     {/* Score */}

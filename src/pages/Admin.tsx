@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Video, Box, Image, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users } from "lucide-react";
+import { FileText, Video, Box, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users } from "lucide-react";
 import { toast } from "sonner";
 import AdminAttendance from "@/components/AdminAttendance";
 import LoggedInStudents from "@/components/LoggedInStudents";
@@ -34,7 +34,7 @@ const Admin = () => {
   const fileInputRefs = {
     pyq: useRef<HTMLInputElement>(null),
     object: useRef<HTMLInputElement>(null),
-    reference: useRef<HTMLInputElement>(null),
+    video: useRef<HTMLInputElement>(null),
   };
   const navigate = useNavigate();
 
@@ -186,31 +186,29 @@ const Admin = () => {
     }
   };
 
-  const handleReferenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !titles.video.trim()) {
+      toast.error("Please enter a title first");
+      return;
+    }
 
-    setUploading('reference');
+    setUploading('video');
     try {
-      // Delete existing reference for this section
-      const existing = content.find(c => c.content_type === 'reference');
-      if (existing) {
-        await supabase.from('content').delete().eq('id', existing.id);
-      }
-
-      const fileUrl = await uploadFile(file, 'reference');
+      const fileUrl = await uploadFile(file, 'video');
       
       const { error } = await supabase.from('content').insert({
         semester: selectedSemester,
         drawing_type: selectedType,
-        content_type: 'reference',
-        title: `Reference - Sem ${selectedSemester} ${selectedType}`,
+        content_type: 'video',
+        title: titles.video,
         file_url: fileUrl,
       });
 
       if (error) throw error;
       
-      toast.success("Reference image set successfully!");
+      toast.success("Video uploaded successfully!");
+      setTitles(prev => ({ ...prev, video: "" }));
       fetchContent();
     } catch (error: any) {
       toast.error(error.message || "Failed to upload");
@@ -229,8 +227,6 @@ const Admin = () => {
       toast.error(error.message || "Failed to delete");
     }
   };
-
-  const referenceImage = content.find(c => c.content_type === 'reference');
 
   return (
     <div className="min-h-screen bg-background">
@@ -304,7 +300,7 @@ const Admin = () => {
             transition={{ delay: 0.2 }}
           >
             <Tabs defaultValue="students" className="w-full">
-              <TabsList className="grid grid-cols-6 max-w-4xl mb-8">
+              <TabsList className="grid grid-cols-5 max-w-3xl mb-8">
                 <TabsTrigger value="students" className="gap-2">
                   <Users className="w-4 h-4" />
                   <span className="hidden sm:inline">Students</span>
@@ -324,10 +320,6 @@ const Admin = () => {
                 <TabsTrigger value="objects" className="gap-2">
                   <Box className="w-4 h-4" />
                   <span className="hidden sm:inline">Objects</span>
-                </TabsTrigger>
-                <TabsTrigger value="reference" className="gap-2">
-                  <Image className="w-4 h-4" />
-                  <span className="hidden sm:inline">Reference</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -416,7 +408,7 @@ const Admin = () => {
                       Video Tutorials
                     </CardTitle>
                     <CardDescription>
-                      Add video tutorials with YouTube or direct video links
+                      Add video tutorials via URL or upload video files
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -431,7 +423,7 @@ const Admin = () => {
                           />
                         </div>
                         <div>
-                          <Label>Video URL</Label>
+                          <Label>Video URL (YouTube or direct link)</Label>
                           <Input 
                             placeholder="https://youtube.com/watch?v=..."
                             value={videoUrl}
@@ -439,18 +431,37 @@ const Admin = () => {
                           />
                         </div>
                       </div>
-                      <Button 
-                        onClick={handleVideoAdd} 
-                        className="gap-2"
-                        disabled={uploading === 'video'}
-                      >
-                        {uploading === 'video' ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
-                        Add Video
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={handleVideoAdd} 
+                          className="gap-2"
+                          disabled={uploading === 'video' || !titles.video.trim() || !videoUrl.trim()}
+                        >
+                          {uploading === 'video' ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
+                          Add URL
+                        </Button>
+                        <div className="text-sm text-muted-foreground flex items-center">or</div>
+                        <Button
+                          variant="outline"
+                          className="gap-2"
+                          onClick={() => titles.video && fileInputRefs.video.current?.click()}
+                          disabled={uploading === 'video' || !titles.video.trim()}
+                        >
+                          <Upload className="w-4 h-4" />
+                          Upload File
+                        </Button>
+                        <input
+                          ref={fileInputRefs.video}
+                          type="file"
+                          accept="video/*"
+                          onChange={handleVideoFileUpload}
+                          className="hidden"
+                        />
+                      </div>
 
                       {/* List existing videos */}
                       <div className="mt-6 space-y-2">
@@ -539,70 +550,6 @@ const Admin = () => {
                 </Card>
               </TabsContent>
 
-              {/* Reference Images Tab */}
-              <TabsContent value="reference">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-mono flex items-center gap-2">
-                      <Image className="w-5 h-5 text-primary" />
-                      AI Reference Images
-                    </CardTitle>
-                    <CardDescription>
-                      Upload reference images for AI drawing evaluation. These images will be used to compare and evaluate student submissions.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm">
-                        <p className="font-medium text-primary mb-1">Important</p>
-                        <p className="text-muted-foreground">
-                          Upload a clear, accurate reference drawing. The AI will compare student submissions against this image.
-                        </p>
-                      </div>
-                      
-                      {referenceImage && (
-                        <div className="p-4 rounded-xl bg-muted/50">
-                          <p className="text-sm font-medium mb-2">Current Reference:</p>
-                          <img 
-                            src={referenceImage.file_url || ''} 
-                            alt="Reference" 
-                            className="max-w-xs rounded-lg border border-border"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <Label>Reference Drawing Image</Label>
-                        <div 
-                          onClick={() => fileInputRefs.reference.current?.click()}
-                          className="mt-2 border-2 border-dashed border-primary/30 rounded-xl p-8 text-center hover:border-primary transition-colors cursor-pointer bg-primary/5"
-                        >
-                          {uploading === 'reference' ? (
-                            <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
-                          ) : (
-                            <>
-                              <Upload className="w-8 h-8 mx-auto text-primary mb-2" />
-                              <p className="text-sm font-medium">
-                                {referenceImage ? 'Replace Reference Image' : 'Upload Reference Image'}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                PNG, JPG up to 10MB
-                              </p>
-                            </>
-                          )}
-                        </div>
-                        <input
-                          ref={fileInputRefs.reference}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleReferenceUpload}
-                          className="hidden"
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
             </Tabs>
           </motion.div>
         </div>
