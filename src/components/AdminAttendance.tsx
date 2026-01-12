@@ -53,28 +53,31 @@ const AdminAttendance = () => {
   const fetchStudentsAndAttendance = async () => {
     setIsLoading(true);
     try {
-      // Fetch students for the selected branch
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('email, branch, full_name, username')
-        .eq('branch', selectedBranch);
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        throw new Error("Admin session expired. Please login again.");
+      }
 
-      if (studentsError) throw studentsError;
-      setStudents(studentsData || []);
-
-      // Fetch attendance for the entire month
       const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
       const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
-      
-      const { data: attendanceData, error: attendanceError } = await supabase
-        .from('attendance')
-        .select('student_email, date')
-        .eq('branch', selectedBranch)
-        .gte('date', monthStart)
-        .lte('date', monthEnd);
 
-      if (attendanceError) throw attendanceError;
-      setAttendanceRecords(attendanceData || []);
+      const [studentsResp, attendanceResp] = await Promise.all([
+        supabase.functions.invoke("admin-api", {
+          body: { action: "get_students_by_branch", adminToken, branch: selectedBranch },
+        }),
+        supabase.functions.invoke("admin-api", {
+          body: { action: "get_attendance_by_branch_month", adminToken, branch: selectedBranch, monthStart, monthEnd },
+        }),
+      ]);
+
+      if (studentsResp.error) throw new Error(studentsResp.error.message);
+      if (attendanceResp.error) throw new Error(attendanceResp.error.message);
+
+      if (studentsResp.data?.error) throw new Error(studentsResp.data.error);
+      if (attendanceResp.data?.error) throw new Error(attendanceResp.data.error);
+
+      setStudents(studentsResp.data?.students || []);
+      setAttendanceRecords(attendanceResp.data?.attendance || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
@@ -86,27 +89,24 @@ const AdminAttendance = () => {
   const markAttendance = async (studentEmail: string) => {
     setMarking(studentEmail);
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      
-      const { error } = await supabase
-        .from('attendance')
-        .insert({
-          student_email: studentEmail,
-          branch: selectedBranch,
-          date: dateStr,
-          marked_by: 'admin',
-        });
-
-      if (error) {
-        if (error.code === '23505') {
-          toast.error('Attendance already marked for this date');
-        } else {
-          throw error;
-        }
-      } else {
-        toast.success('Attendance marked!');
-        setAttendanceRecords(prev => [...prev, { student_email: studentEmail, date: dateStr }]);
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        throw new Error("Admin session expired. Please login again.");
       }
+
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "mark_attendance", adminToken, branch: selectedBranch, date: dateStr, studentEmail },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success('Attendance marked!');
+      setAttendanceRecords(prev => [...prev, { student_email: studentEmail, date: dateStr }]);
     } catch (error: any) {
       toast.error(error.message || 'Failed to mark attendance');
     } finally {

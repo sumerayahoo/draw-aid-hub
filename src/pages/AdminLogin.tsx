@@ -10,7 +10,6 @@ import { Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Header from "@/components/Header";
 
-const ADMIN_PASSWORD = "772855";
 
 const AdminLogin = () => {
   const [password, setPassword] = useState("");
@@ -24,13 +23,25 @@ const AdminLogin = () => {
 
   const checkAdminSession = async () => {
     try {
-      const adminSession = localStorage.getItem("admin_session");
-      if (adminSession === "active") {
-        navigate('/admin');
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        setCheckingSession(false);
         return;
       }
+
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "verify", adminToken },
+      });
+
+      if (!error && data?.valid) {
+        navigate("/admin");
+        return;
+      }
+
+      localStorage.removeItem("admin_session_token");
+      localStorage.removeItem("admin_session");
     } catch (error) {
-      console.error('Error checking admin session:', error);
+      console.error("Error checking admin session:", error);
     } finally {
       setCheckingSession(false);
     }
@@ -41,15 +52,20 @@ const AdminLogin = () => {
     setIsLoading(true);
 
     try {
-      if (password === ADMIN_PASSWORD) {
-        localStorage.setItem("admin_session", "active");
-        toast.success("Logged in as admin!");
-        navigate('/admin');
-      } else {
-        toast.error("Invalid password");
-      }
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "login", password },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      localStorage.setItem("admin_session", "active");
+      localStorage.setItem("admin_session_token", data.adminToken);
+
+      toast.success("Logged in as admin!");
+      navigate("/admin");
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
       toast.error(error.message || "Failed to login");
     } finally {
       setIsLoading(false);

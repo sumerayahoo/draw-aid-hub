@@ -24,7 +24,11 @@ serve(async (req) => {
 
     const prompt = `You are an expert technical drawing evaluator specializing in ${drawingType} drawings.
 
-Analyze the student's drawing compared to the reference image. Focus on:
+FIRST: Determine whether the student's image is actually an engineering/technical drawing relevant to ${drawingType}.
+- If the student's image is NOT a technical/engineering drawing (e.g., random photo, cartoon, scenery, handwriting, non-drawing), OR is clearly unrelated to ${drawingType}, you MUST return score 0 and accuracy 0.
+- In that case, include an error like "Non-technical or unrelated image" and short guidance in feedback.
+
+If it IS a relevant technical drawing, analyze the student's drawing compared to the reference image. Focus on:
 - Projection accuracy (how well the views align)
 - View alignment (Front, Top, Side views if applicable)
 - Line quality and consistency
@@ -33,7 +37,7 @@ Analyze the student's drawing compared to the reference image. Focus on:
 
 Provide your evaluation in the following JSON format ONLY (no other text):
 {
-  "score": <number from 1-10>,
+  "score": <number from 0-10>,
   "accuracy": <percentage from 0-100>,
   "errors": [<array of specific errors found, max 5>],
   "feedback": "<constructive feedback paragraph>"
