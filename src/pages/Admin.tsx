@@ -47,12 +47,30 @@ const Admin = () => {
   }, [selectedSemester, selectedType]);
 
   const checkAdminAccess = async () => {
-    const adminSession = localStorage.getItem("admin_session");
-    if (adminSession !== "active") {
-      navigate('/admin-login');
+    const adminToken = localStorage.getItem("admin_session_token");
+    if (!adminToken) {
+      navigate("/admin-login");
       return;
     }
-    setIsLoading(false);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "verify", adminToken },
+      });
+
+      if (error || !data?.valid) {
+        localStorage.removeItem("admin_session_token");
+        localStorage.removeItem("admin_session");
+        navigate("/admin-login");
+        return;
+      }
+
+      setIsLoading(false);
+    } catch {
+      localStorage.removeItem("admin_session_token");
+      localStorage.removeItem("admin_session");
+      navigate("/admin-login");
+    }
   };
 
   const fetchContent = async () => {
@@ -74,6 +92,7 @@ const Admin = () => {
 
   const handleLogout = async () => {
     localStorage.removeItem("admin_session");
+    localStorage.removeItem("admin_session_token");
     toast.success("Logged out successfully!");
     navigate('/admin-login');
   };
@@ -82,9 +101,9 @@ const Admin = () => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${selectedSemester}/${selectedType}/${contentType}/${Date.now()}.${fileExt}`;
 
-    const { error: uploadError, data } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('content')
-      .upload(fileName, file);
+      .upload(fileName, file, { upsert: false });
 
     if (uploadError) throw uploadError;
 
@@ -93,6 +112,30 @@ const Admin = () => {
       .getPublicUrl(fileName);
 
     return publicUrl;
+  };
+
+  const insertContentRow = async (payload: { semester: string; drawing_type: string; content_type: string; title: string; file_url: string | null; }) => {
+    const adminToken = localStorage.getItem("admin_session_token");
+    if (!adminToken) throw new Error("Admin session expired. Please login again.");
+
+    const { data, error } = await supabase.functions.invoke("admin-api", {
+      body: { action: "insert_content", adminToken, contentItem: payload },
+    });
+
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+  };
+
+  const deleteContentRow = async (id: string) => {
+    const adminToken = localStorage.getItem("admin_session_token");
+    if (!adminToken) throw new Error("Admin session expired. Please login again.");
+
+    const { data, error } = await supabase.functions.invoke("admin-api", {
+      body: { action: "delete_content", adminToken, contentId: id },
+    });
+
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
   };
 
   const handlePYQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,8 +148,8 @@ const Admin = () => {
     setUploading('pyq');
     try {
       const fileUrl = await uploadFile(file, 'pyq');
-      
-      const { error } = await supabase.from('content').insert({
+
+      await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'pyq',
@@ -114,8 +157,6 @@ const Admin = () => {
         file_url: fileUrl,
       });
 
-      if (error) throw error;
-      
       toast.success("PYQ uploaded successfully!");
       setTitles(prev => ({ ...prev, pyq: "" }));
       fetchContent();
@@ -134,7 +175,7 @@ const Admin = () => {
 
     setUploading('video');
     try {
-      const { error } = await supabase.from('content').insert({
+      await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'video',
@@ -142,8 +183,6 @@ const Admin = () => {
         file_url: videoUrl,
       });
 
-      if (error) throw error;
-      
       toast.success("Video added successfully!");
       setTitles(prev => ({ ...prev, video: "" }));
       setVideoUrl("");
@@ -165,8 +204,8 @@ const Admin = () => {
     setUploading('object');
     try {
       const fileUrl = await uploadFile(file, 'object');
-      
-      const { error } = await supabase.from('content').insert({
+
+      await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'object',
@@ -174,8 +213,6 @@ const Admin = () => {
         file_url: fileUrl,
       });
 
-      if (error) throw error;
-      
       toast.success("Object image uploaded successfully!");
       setTitles(prev => ({ ...prev, object: "" }));
       fetchContent();
@@ -196,8 +233,8 @@ const Admin = () => {
     setUploading('video');
     try {
       const fileUrl = await uploadFile(file, 'video');
-      
-      const { error } = await supabase.from('content').insert({
+
+      await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'video',
@@ -205,8 +242,6 @@ const Admin = () => {
         file_url: fileUrl,
       });
 
-      if (error) throw error;
-      
       toast.success("Video uploaded successfully!");
       setTitles(prev => ({ ...prev, video: "" }));
       fetchContent();
@@ -219,8 +254,7 @@ const Admin = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from('content').delete().eq('id', id);
-      if (error) throw error;
+      await deleteContentRow(id);
       toast.success("Content deleted!");
       fetchContent();
     } catch (error: any) {

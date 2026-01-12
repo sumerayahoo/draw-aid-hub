@@ -68,10 +68,33 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [pointsEarned, setPointsEarned] = useState<number | null>(null);
 
-  // History state
-  const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<TestHistoryItem[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  // Recommended videos (for scores < 8)
+  const [recommendedVideos, setRecommendedVideos] = useState<
+    { id: string; title: string; file_url: string | null }[]
+  >([]);
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+
+  const isYouTubeUrl = (url: string) => /youtu\.be|youtube\.com/.test(url);
+
+  const getYouTubeEmbedUrl = (url: string) => {
+    try {
+      // youtu.be/<id>
+      const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
+      if (short?.[1]) return `https://www.youtube.com/embed/${short[1]}`;
+
+      const u = new URL(url);
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+
+      // /shorts/<id>
+      const shorts = u.pathname.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
+      if (shorts?.[1]) return `https://www.youtube.com/embed/${shorts[1]}`;
+
+      return url;
+    } catch {
+      return url;
+    }
+  };
 
   // Initialize audio for timer alert
   useEffect(() => {
@@ -151,6 +174,60 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
       fetchHistory();
     }
   }, [showHistory, fetchHistory]);
+
+  const extractKeywords = (text: string) => {
+    const raw = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const stop = new Set(["the", "and", "or", "to", "a", "an", "of", "in", "on", "for", "with", "your", "is", "are"]);
+    return Array.from(new Set(raw.filter((w) => w.length >= 4 && !stop.has(w)))).slice(0, 20);
+  };
+
+  const fetchRecommendedVideos = useCallback(async (evalResult: EvaluationResult) => {
+    if (evalResult.score >= 8) {
+      setRecommendedVideos([]);
+      return;
+    }
+
+    setIsLoadingVideos(true);
+    try {
+      const { data, error } = await supabase
+        .from("content")
+        .select("id, title, file_url")
+        .eq("content_type", "video")
+        .eq("drawing_type", drawingType)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const videos = (data || []).map((v) => ({
+        id: v.id as string,
+        title: v.title as string,
+        file_url: (v.file_url as string | null) ?? null,
+      }));
+
+      const keywords = extractKeywords([...(evalResult.errors || []), evalResult.feedback || ""].join(" "));
+
+      // Rank videos by how many keywords appear in the title
+      const ranked = videos
+        .map((v) => {
+          const title = v.title.toLowerCase();
+          const score = keywords.reduce((acc, k) => (title.includes(k) ? acc + 1 : acc), 0);
+          return { v, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      setRecommendedVideos(ranked.slice(0, 3).map((r) => r.v));
+    } catch (e) {
+      console.error("Failed to fetch recommended videos:", e);
+      setRecommendedVideos([]);
+    } finally {
+      setIsLoadingVideos(false);
+    }
+  }, [drawingType]);
 
   const startTest = () => {
     const totalSeconds = hours * 3600 + minutes * 60 + seconds;
@@ -283,19 +360,24 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
       if (error) throw error;
       setResult(data);
       await saveToHistory(data);
-      
+
       // Add points if logged in as student and score is above 6
       if (data.score > 6) {
         await addPointsForScore(data.score);
       }
+
+      // If score < 8, recommend improvement videos for this drawing type
+      await fetchRecommendedVideos(data);
     } catch (error) {
       console.error('Evaluation error:', error);
-      setResult({
+      const fallback = {
         score: 0,
         accuracy: 0,
         errors: ['Failed to evaluate drawing. Please try again.'],
         feedback: 'An error occurred during evaluation.',
-      });
+      };
+      setResult(fallback);
+      await fetchRecommendedVideos(fallback);
     } finally {
       setIsEvaluating(false);
     }
@@ -843,6 +925,69 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
                       {result.feedback}
                     </p>
                   </div>
+
+                  {/* Improvement videos (score < 8) */}
+                  {result.score < 8 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-3">Recommended Videos to Improve</h3>
+
+                      {isLoadingVideos ? (
+                        <p className="text-sm text-muted-foreground">Loading videos…</p>
+                      ) : recommendedVideos.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No matching videos found for this drawing type yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {recommendedVideos.map((v) => {
+                            const url = v.file_url || "";
+                            const canEmbed = !!url;
+
+                            return (
+                              <div key={v.id} className="rounded-xl border border-border/50 bg-muted/30 p-4">
+                                <p className="font-medium mb-3">{v.title}</p>
+
+                                {!canEmbed ? (
+                                  <p className="text-sm text-muted-foreground">No video URL found.</p>
+                                ) : isYouTubeUrl(url) ? (
+                                  <div className="aspect-video w-full overflow-hidden rounded-lg border border-border/50">
+                                    <iframe
+                                      className="w-full h-full"
+                                      src={getYouTubeEmbedUrl(url)}
+                                      title={v.title}
+                                      loading="lazy"
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                      allowFullScreen
+                                    />
+                                  </div>
+                                ) : (
+                                  <video
+                                    className="w-full rounded-lg border border-border/50"
+                                    controls
+                                    preload="metadata"
+                                  >
+                                    <source src={url} />
+                                    Your browser does not support the video tag.
+                                  </video>
+                                )}
+
+                                {canEmbed && (
+                                  <a
+                                    className="mt-3 inline-block text-sm underline text-primary"
+                                    href={url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Open video
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-4">
                     <Button variant="outline" onClick={() => exportResult()} className="flex-1">
