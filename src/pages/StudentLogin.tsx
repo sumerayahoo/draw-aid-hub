@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GraduationCap, Loader2, Mail, Lock, Building2, KeyRound, User } from "lucide-react";
+import { GraduationCap, Loader2, Mail, Lock, Building2, KeyRound, User, Hash } from "lucide-react";
 import { toast } from "sonner";
 import Header from "@/components/Header";
 import { z } from "zod";
@@ -25,6 +25,7 @@ const registerSchema = z.object({
   branch: z.enum(["computer_engineering", "cst", "data_science", "ai", "ece"], {
     required_error: "Please select a branch",
   }),
+  rollNo: z.string().optional(),
 });
 
 const branches = [
@@ -41,6 +42,7 @@ const StudentLogin = () => {
   const [identifier, setIdentifier] = useState(""); // For login - can be email or username
   const [password, setPassword] = useState("");
   const [branch, setBranch] = useState("");
+  const [rollNo, setRollNo] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [activeTab, setActiveTab] = useState("login");
@@ -132,7 +134,7 @@ const StudentLogin = () => {
     e.preventDefault();
     
     try {
-      registerSchema.parse({ email, username, password, branch });
+      registerSchema.parse({ email, username, password, branch, rollNo });
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast.error(err.errors[0].message);
@@ -140,11 +142,17 @@ const StudentLogin = () => {
       }
     }
 
+    // Validate roll number if provided
+    if (rollNo && (isNaN(Number(rollNo)) || Number(rollNo) <= 0)) {
+      toast.error("Roll number must be a positive number");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("student-auth", {
-        body: { action: "register", email, username, password, branch },
+        body: { action: "register", email, username, password, branch, rollNo: rollNo || null },
       });
 
       if (error) throw new Error(error.message);
@@ -459,6 +467,23 @@ const StudentLogin = () => {
                           />
                         </div>
                         <div className="space-y-2">
+                          <Label htmlFor="register-rollno" className="flex items-center gap-2">
+                            <Hash className="w-4 h-4" />
+                            Roll Number
+                          </Label>
+                          <Input
+                            id="register-rollno"
+                            type="number"
+                            placeholder="e.g., 42"
+                            value={rollNo}
+                            onChange={(e) => setRollNo(e.target.value)}
+                            min={1}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Optional - your class roll number
+                          </p>
+                        </div>
+                        <div className="space-y-2">
                           <Label htmlFor="register-password" className="flex items-center gap-2">
                             <Lock className="w-4 h-4" />
                             Password
@@ -472,12 +497,9 @@ const StudentLogin = () => {
                             required
                             minLength={6}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Minimum 6 characters
-                          </p>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="branch" className="flex items-center gap-2">
+                          <Label htmlFor="register-branch" className="flex items-center gap-2">
                             <Building2 className="w-4 h-4" />
                             Branch
                           </Label>
@@ -498,7 +520,7 @@ const StudentLogin = () => {
                           type="submit"
                           variant="gradient"
                           className="w-full"
-                          disabled={isLoading}
+                          disabled={isLoading || !branch}
                         >
                           {isLoading ? (
                             <>

@@ -112,9 +112,9 @@ serve(async (req) => {
 
       const { data, error } = await supabase
         .from("students")
-        .select("email, branch, full_name, username")
+        .select("email, branch, full_name, username, roll_no")
         .in("branch", normalizedBranches)
-        .order("created_at", { ascending: true });
+        .order("roll_no", { ascending: true, nullsFirst: false });
 
       if (error) {
         console.error("get_students_by_branch error:", error);
@@ -142,7 +142,7 @@ serve(async (req) => {
 
       const { data, error } = await supabase
         .from("attendance")
-        .select("student_email, date")
+        .select("id, student_email, date")
         .eq("branch", branch)
         .gte("date", monthStart)
         .lte("date", monthEnd);
@@ -187,6 +187,66 @@ serve(async (req) => {
 
         console.error("mark_attendance error:", error);
         return new Response(JSON.stringify({ error: "Failed to mark attendance" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "unmark_attendance") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      if (!branch || !date || !studentEmail) {
+        return new Response(JSON.stringify({ error: "branch, date, studentEmail are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error } = await supabase
+        .from("attendance")
+        .delete()
+        .eq("branch", branch)
+        .eq("date", date)
+        .eq("student_email", String(studentEmail).toLowerCase());
+
+      if (error) {
+        console.error("unmark_attendance error:", error);
+        return new Response(JSON.stringify({ error: "Failed to remove attendance" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "remove_student_session") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      if (!studentEmail) {
+        return new Response(JSON.stringify({ error: "studentEmail is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error } = await supabase
+        .from("student_sessions")
+        .delete()
+        .eq("student_email", String(studentEmail).toLowerCase());
+
+      if (error) {
+        console.error("remove_student_session error:", error);
+        return new Response(JSON.stringify({ error: "Failed to remove student session" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

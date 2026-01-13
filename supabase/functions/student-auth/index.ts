@@ -38,7 +38,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, email, password, branch, username, sessionToken, newPassword, resetToken, profile, score } = body;
+    const { action, email, password, branch, username, sessionToken, newPassword, resetToken, profile, score, rollNo } = body;
 
     const validBranches = ['computer_engineering', 'cst', 'data_science', 'ai', 'ece'];
 
@@ -84,6 +84,17 @@ serve(async (req) => {
         );
       }
 
+      // Validate roll number if provided
+      if (rollNo !== undefined && rollNo !== null && rollNo !== '') {
+        const rollNoNum = Number(rollNo);
+        if (isNaN(rollNoNum) || rollNoNum <= 0 || !Number.isInteger(rollNoNum)) {
+          return new Response(
+            JSON.stringify({ error: 'Roll number must be a positive integer' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // Check if email already exists
       const { data: existingEmail } = await supabase
         .from('students')
@@ -114,15 +125,21 @@ serve(async (req) => {
 
       const passwordHash = await hashPassword(password);
 
+      const insertData: Record<string, any> = {
+        email: email.toLowerCase(),
+        username: username.toLowerCase(),
+        password_hash: passwordHash,
+        branch: branch,
+        points: 0,
+      };
+
+      if (rollNo !== undefined && rollNo !== null && rollNo !== '') {
+        insertData.roll_no = Number(rollNo);
+      }
+
       const { error: insertError } = await supabase
         .from('students')
-        .insert({
-          email: email.toLowerCase(),
-          username: username.toLowerCase(),
-          password_hash: passwordHash,
-          branch: branch,
-          points: 0,
-        });
+        .insert(insertData);
 
       if (insertError) {
         console.error('Registration error:', insertError);
@@ -167,7 +184,7 @@ serve(async (req) => {
       // Try login with email or username
       let query = supabase
         .from('students')
-        .select('id, email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
+        .select('id, email, username, branch, full_name, avatar_url, interests, goals, extra_info, points, roll_no')
         .eq('password_hash', passwordHash);
 
       if (email) {
@@ -237,7 +254,7 @@ serve(async (req) => {
       // Get student details (excluding password_hash)
       const { data: student } = await supabase
         .from('students')
-        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
+        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points, roll_no')
         .eq('email', session.student_email)
         .single();
 
@@ -253,6 +270,7 @@ serve(async (req) => {
           goals: student?.goals,
           extraInfo: student?.extra_info,
           points: student?.points || 0,
+          rollNo: student?.roll_no,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -393,7 +411,7 @@ serve(async (req) => {
         );
       }
 
-      const updateData: Record<string, string> = {};
+      const updateData: Record<string, any> = {};
       if (profile.fullName !== undefined) updateData.full_name = profile.fullName;
       if (profile.avatarUrl !== undefined) updateData.avatar_url = profile.avatarUrl;
       if (profile.interests !== undefined) updateData.interests = profile.interests;
@@ -401,6 +419,16 @@ serve(async (req) => {
       if (profile.extraInfo !== undefined) updateData.extra_info = profile.extraInfo;
       if (profile.branch !== undefined && validBranches.includes(profile.branch)) {
         updateData.branch = profile.branch;
+      }
+      if (profile.rollNo !== undefined) {
+        if (profile.rollNo === null || profile.rollNo === '') {
+          updateData.roll_no = null;
+        } else {
+          const rollNoNum = Number(profile.rollNo);
+          if (!isNaN(rollNoNum) && rollNoNum > 0 && Number.isInteger(rollNoNum)) {
+            updateData.roll_no = rollNoNum;
+          }
+        }
       }
 
       const { error: updateError } = await supabase
@@ -447,7 +475,7 @@ serve(async (req) => {
       // Exclude password_hash from response
       const { data: student } = await supabase
         .from('students')
-        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points')
+        .select('email, username, branch, full_name, avatar_url, interests, goals, extra_info, points, roll_no')
         .eq('email', session.student_email)
         .single();
 
@@ -464,6 +492,7 @@ serve(async (req) => {
             goals: student?.goals,
             extraInfo: student?.extra_info,
             points: student?.points || 0,
+            rollNo: student?.roll_no,
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -507,13 +536,13 @@ serve(async (req) => {
     }
 
     if (action === 'add_points') {
-      if (!sessionToken) {
+      if (!sessionToken || score === undefined) {
         return new Response(
-          JSON.stringify({ error: 'Authentication required' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Session token and score are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
+
       // Verify session
       const { data: session } = await supabase
         .from('student_sessions')
@@ -531,13 +560,10 @@ serve(async (req) => {
 
       // Calculate points based on score
       let pointsToAdd = 0;
-      if (score >= 9) {
-        pointsToAdd = 10;
-      } else if (score >= 7) {
-        pointsToAdd = 8;
-      } else if (score > 6) {
-        pointsToAdd = 5;
-      }
+      if (score >= 9) pointsToAdd = 10;
+      else if (score >= 8) pointsToAdd = 8;
+      else if (score >= 7) pointsToAdd = 5;
+      else if (score > 6) pointsToAdd = 3;
 
       if (pointsToAdd > 0) {
         // Get current points
@@ -586,7 +612,7 @@ serve(async (req) => {
       // Get student details (excluding password_hash)
       const { data: students } = await supabase
         .from('students')
-        .select('email, username, branch, full_name, avatar_url, last_login, points')
+        .select('email, username, branch, full_name, avatar_url, last_login, points, roll_no')
         .in('email', emails);
 
       // Group by branch
@@ -602,6 +628,7 @@ serve(async (req) => {
           avatarUrl: student.avatar_url,
           lastLogin: student.last_login,
           points: student.points || 0,
+          rollNo: student.roll_no,
         });
       });
 

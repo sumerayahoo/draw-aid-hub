@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Save, Loader2, Camera, Upload } from "lucide-react";
+import { User, Save, Loader2, Camera, Upload, Hash } from "lucide-react";
 import { toast } from "sonner";
 
 interface StudentData {
@@ -20,6 +20,7 @@ interface StudentData {
   goals: string;
   extraInfo: string;
   points: number;
+  rollNo?: number | null;
 }
 
 interface StudentProfileProps {
@@ -46,6 +47,7 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
     interests: studentData.interests || "",
     goals: studentData.goals || "",
     extraInfo: studentData.extraInfo || "",
+    rollNo: studentData.rollNo?.toString() || "",
   });
 
   const handleAvatarClick = () => {
@@ -100,13 +102,22 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
       return;
     }
 
+    // Validate roll number if provided
+    if (formData.rollNo && (isNaN(Number(formData.rollNo)) || Number(formData.rollNo) <= 0)) {
+      toast.error("Roll number must be a positive number");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("student-auth", {
         body: { 
           action: "update_profile", 
           sessionToken,
-          profile: formData
+          profile: {
+            ...formData,
+            rollNo: formData.rollNo ? Number(formData.rollNo) : null,
+          }
         },
       });
 
@@ -210,14 +221,30 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              value={studentData.email}
-              disabled
-              className="bg-muted"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={studentData.email}
+                disabled
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rollNo" className="flex items-center gap-2">
+                <Hash className="w-4 h-4" />
+                Roll Number
+              </Label>
+              <Input
+                id="rollNo"
+                type="number"
+                placeholder="Your roll number"
+                value={formData.rollNo}
+                onChange={(e) => setFormData(prev => ({ ...prev, rollNo: e.target.value }))}
+                min={1}
+              />
+            </div>
           </div>
 
           {/* Branch Selection */}
