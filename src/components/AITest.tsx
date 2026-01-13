@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell, Star } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell, Star, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,12 @@ interface TestHistoryItem {
   accuracy: number;
   errors: string[];
   feedback: string | null;
+}
+
+interface RecommendedVideo {
+  id: string;
+  title: string;
+  file_url: string | null;
 }
 
 interface AITestProps {
@@ -68,28 +74,26 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [pointsEarned, setPointsEarned] = useState<number | null>(null);
 
+  // History state
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<TestHistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   // Recommended videos (for scores < 8)
-  const [recommendedVideos, setRecommendedVideos] = useState<
-    { id: string; title: string; file_url: string | null }[]
-  >([]);
+  const [recommendedVideos, setRecommendedVideos] = useState<RecommendedVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
 
   const isYouTubeUrl = (url: string) => /youtu\.be|youtube\.com/.test(url);
 
   const getYouTubeEmbedUrl = (url: string) => {
     try {
-      // youtu.be/<id>
       const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
       if (short?.[1]) return `https://www.youtube.com/embed/${short[1]}`;
-
       const u = new URL(url);
       const v = u.searchParams.get("v");
       if (v) return `https://www.youtube.com/embed/${v}`;
-
-      // /shorts/<id>
       const shorts = u.pathname.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
       if (shorts?.[1]) return `https://www.youtube.com/embed/${shorts[1]}`;
-
       return url;
     } catch {
       return url;
@@ -114,11 +118,9 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
           if (prev <= 1) {
             setIsRunning(false);
             setTestEnded(true);
-            // Play alert sound
             if (audioRef.current) {
               audioRef.current.play().catch(() => {});
             }
-            // Show toast notification
             toast({
               title: "⏰ Time's Up!",
               description: "Your test time has ended. Please upload your drawing for evaluation.",
@@ -126,7 +128,6 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
             });
             return 0;
           }
-          // Alert at 1 minute remaining
           if (prev === 61) {
             toast({
               title: "⚠️ 1 Minute Remaining",
@@ -134,7 +135,6 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
               variant: "destructive",
             });
           }
-          // Alert at 5 minutes remaining
           if (prev === 301) {
             toast({
               title: "⏱️ 5 Minutes Remaining",
@@ -253,6 +253,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     setUserDrawing(null);
     setResult(null);
     setPointsEarned(null);
+    setRecommendedVideos([]);
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -321,7 +322,6 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
   const addPointsForScore = async (score: number) => {
     const sessionToken = getStudentSession();
     if (!sessionToken) {
-      // Not logged in as student, skip points
       return;
     }
 
@@ -361,12 +361,10 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
       setResult(data);
       await saveToHistory(data);
 
-      // Add points if logged in as student and score is above 6
       if (data.score > 6) {
         await addPointsForScore(data.score);
       }
 
-      // If score < 8, recommend improvement videos for this drawing type
       await fetchRecommendedVideos(data);
     } catch (error) {
       console.error('Evaluation error:', error);
@@ -720,289 +718,220 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
                     End Test
                   </Button>
                 </div>
-
-                <p className="text-muted-foreground mt-8 text-sm">
-                  Complete your drawing. When ready, click "End Test" to submit for evaluation.
-                </p>
               </div>
             </motion.div>
           )}
 
-          {/* Test Ended - Evaluation Phase */}
-          {testEnded && !result && (
+          {/* Test Ended - Upload and Evaluate */}
+          {testEnded && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="max-w-3xl mx-auto"
+              className="max-w-4xl mx-auto"
             >
               <div className="bg-card rounded-2xl p-8 shadow-card border border-border/50">
-                <div className="text-center mb-8">
-                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                  <h2 className="font-mono text-2xl font-bold mb-2">Test Complete!</h2>
-                  <p className="text-muted-foreground">
-                    Upload your reference image and drawing for AI evaluation
-                  </p>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-mono text-xl font-semibold">Upload for Evaluation</h2>
+                  <Button variant="ghost" size="sm" onClick={resetTest}>
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    New Test
+                  </Button>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6 mb-8">
-                  {/* Reference Image Upload */}
+                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                  {/* Reference Image */}
                   <div>
-                    <Label className="text-sm font-medium mb-3 block">Reference Image</Label>
+                    <Label className="mb-2 block">Reference Drawing</Label>
                     <div
-                      className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                        referenceImage ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                        referenceImage ? 'border-green-500/50 bg-green-500/5' : 'border-border hover:border-primary/50'
                       }`}
+                      onClick={() => document.getElementById('reference-upload')?.click()}
                     >
                       {referenceImage ? (
-                        <div className="space-y-3">
-                          <img
-                            src={referenceImage}
-                            alt="Reference"
-                            className="max-h-48 mx-auto rounded-lg object-contain"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setReferenceImage(null)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
+                        <img src={referenceImage} alt="Reference" className="max-h-48 mx-auto rounded-lg" />
                       ) : (
-                        <label className="cursor-pointer block">
-                          <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Click to upload reference
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleReferenceUpload}
-                            className="hidden"
-                          />
-                        </label>
+                        <>
+                          <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">Upload reference image</p>
+                        </>
                       )}
                     </div>
+                    <input
+                      id="reference-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReferenceUpload}
+                      className="hidden"
+                    />
                   </div>
 
-                  {/* User Drawing Upload */}
+                  {/* User Drawing */}
                   <div>
-                    <Label className="text-sm font-medium mb-3 block">Your Drawing</Label>
+                    <Label className="mb-2 block">Your Drawing</Label>
                     <div
-                      className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                        userDrawing ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                        userDrawing ? 'border-green-500/50 bg-green-500/5' : 'border-border hover:border-primary/50'
                       }`}
+                      onClick={() => document.getElementById('drawing-upload')?.click()}
                     >
                       {userDrawing ? (
-                        <div className="space-y-3">
-                          <img
-                            src={userDrawing}
-                            alt="Your Drawing"
-                            className="max-h-48 mx-auto rounded-lg object-contain"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUserDrawing(null)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
+                        <img src={userDrawing} alt="Your Drawing" className="max-h-48 mx-auto rounded-lg" />
                       ) : (
-                        <label className="cursor-pointer block">
-                          <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Click to upload your drawing
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleUserDrawingUpload}
-                            className="hidden"
-                          />
-                        </label>
+                        <>
+                          <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">Upload your drawing</p>
+                        </>
                       )}
                     </div>
+                    <input
+                      id="drawing-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUserDrawingUpload}
+                      className="hidden"
+                    />
                   </div>
                 </div>
 
-                <div className="flex gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={resetTest}
-                    className="flex-1"
+                <Button
+                  onClick={evaluateDrawing}
+                  disabled={!referenceImage || !userDrawing || isEvaluating}
+                  className="w-full h-12"
+                >
+                  {isEvaluating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Evaluating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      Evaluate Drawing
+                    </>
+                  )}
+                </Button>
+
+                {/* Results */}
+                {result && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-8 p-6 bg-muted/50 rounded-xl"
                   >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Start New Test
-                  </Button>
-                  <Button
-                    onClick={evaluateDrawing}
-                    disabled={!referenceImage || !userDrawing || isEvaluating}
-                    className="flex-1"
-                  >
-                    {isEvaluating ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                        Evaluating...
-                      </>
-                    ) : (
-                      "Get AI Evaluation"
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                      <h3 className="font-mono text-lg font-semibold">Evaluation Results</h3>
+                      <div className="flex items-center gap-4">
+                        <div className="text-center">
+                          <span className={`text-3xl font-bold font-mono ${getScoreColor(result.score)}`}>
+                            {result.score}/10
+                          </span>
+                          <p className="text-xs text-muted-foreground">Score</p>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-3xl font-bold font-mono text-primary">
+                            {result.accuracy}%
+                          </span>
+                          <p className="text-xs text-muted-foreground">Accuracy</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {pointsEarned && (
+                      <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-2">
+                        <Star className="w-5 h-5 text-yellow-500" />
+                        <span className="font-medium">You earned {pointsEarned} points!</span>
+                      </div>
                     )}
-                  </Button>
-                </div>
+
+                    {result.errors && result.errors.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2 flex items-center gap-2">
+                          <XCircle className="w-4 h-4 text-red-500" />
+                          Issues Found
+                        </h4>
+                        <ul className="space-y-1">
+                          {result.errors.map((error, i) => (
+                            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                              <span className="text-red-500">•</span>
+                              {error}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {result.feedback && (
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-primary" />
+                          Feedback
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{result.feedback}</p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => exportResult()}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Result
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Recommended Videos for low scores */}
+                {result && result.score < 8 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-6 p-6 bg-secondary/10 rounded-xl border border-secondary/30"
+                  >
+                    <h3 className="font-mono text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Video className="w-5 h-5 text-secondary" />
+                      Recommended Videos to Improve
+                    </h3>
+                    
+                    {isLoadingVideos ? (
+                      <div className="text-center py-4">
+                        <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin mx-auto" />
+                      </div>
+                    ) : recommendedVideos.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No specific videos found for this topic. Check the video tutorials section for general resources.
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                        {recommendedVideos.map((video) => (
+                          <div key={video.id} className="bg-card rounded-lg p-4 border border-border/50">
+                            <h4 className="font-medium mb-3">{video.title}</h4>
+                            {video.file_url && (
+                              isYouTubeUrl(video.file_url) ? (
+                                <div className="aspect-video rounded-lg overflow-hidden">
+                                  <iframe
+                                    src={getYouTubeEmbedUrl(video.file_url)}
+                                    className="w-full h-full"
+                                    allowFullScreen
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  />
+                                </div>
+                              ) : (
+                                <video
+                                  src={video.file_url}
+                                  controls
+                                  className="w-full rounded-lg"
+                                />
+                              )
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           )}
-
-          {/* Results */}
-          <AnimatePresence>
-            {result && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-3xl mx-auto mt-8"
-              >
-                <div className="bg-card rounded-2xl p-8 shadow-card border border-border/50">
-                  <h2 className="font-mono text-2xl font-bold mb-6 text-center">
-                    Test Results
-                  </h2>
-
-                  {/* Points earned banner */}
-                  {pointsEarned !== null && pointsEarned > 0 && (
-                    <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl p-4 mb-6 text-center">
-                      <div className="flex items-center justify-center gap-2 text-yellow-600">
-                        <Star className="w-6 h-6 fill-yellow-500" />
-                        <span className="text-xl font-bold">+{pointsEarned} Points Earned!</span>
-                        <Star className="w-6 h-6 fill-yellow-500" />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid md:grid-cols-2 gap-6 mb-8">
-                    {/* Score */}
-                    <div className="text-center p-6 rounded-xl bg-muted/50">
-                      <span className="text-sm text-muted-foreground block mb-2">Score</span>
-                      <span className={`text-5xl font-bold font-mono ${getScoreColor(result.score)}`}>
-                        {result.score}/10
-                      </span>
-                    </div>
-
-                    {/* Accuracy */}
-                    <div className="text-center p-6 rounded-xl bg-muted/50">
-                      <span className="text-sm text-muted-foreground block mb-2">Accuracy</span>
-                      <span className={`text-5xl font-bold font-mono ${getScoreColor(result.accuracy / 10)}`}>
-                        {result.accuracy}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Errors */}
-                  {result.errors.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-yellow-500" />
-                        Areas for Improvement
-                      </h3>
-                      <ul className="space-y-2">
-                        {result.errors.map((error, index) => (
-                          <li
-                            key={index}
-                            className="flex items-start gap-2 text-sm text-muted-foreground"
-                          >
-                            <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                            {error}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Feedback */}
-                  <div className="mb-6">
-                    <h3 className="font-semibold mb-3">Feedback</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      {result.feedback}
-                    </p>
-                  </div>
-
-                  {/* Improvement videos (score < 8) */}
-                  {result.score < 8 && (
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-3">Recommended Videos to Improve</h3>
-
-                      {isLoadingVideos ? (
-                        <p className="text-sm text-muted-foreground">Loading videos…</p>
-                      ) : recommendedVideos.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          No matching videos found for this drawing type yet.
-                        </p>
-                      ) : (
-                        <div className="space-y-4">
-                          {recommendedVideos.map((v) => {
-                            const url = v.file_url || "";
-                            const canEmbed = !!url;
-
-                            return (
-                              <div key={v.id} className="rounded-xl border border-border/50 bg-muted/30 p-4">
-                                <p className="font-medium mb-3">{v.title}</p>
-
-                                {!canEmbed ? (
-                                  <p className="text-sm text-muted-foreground">No video URL found.</p>
-                                ) : isYouTubeUrl(url) ? (
-                                  <div className="aspect-video w-full overflow-hidden rounded-lg border border-border/50">
-                                    <iframe
-                                      className="w-full h-full"
-                                      src={getYouTubeEmbedUrl(url)}
-                                      title={v.title}
-                                      loading="lazy"
-                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                      allowFullScreen
-                                    />
-                                  </div>
-                                ) : (
-                                  <video
-                                    className="w-full rounded-lg border border-border/50"
-                                    controls
-                                    preload="metadata"
-                                  >
-                                    <source src={url} />
-                                    Your browser does not support the video tag.
-                                  </video>
-                                )}
-
-                                {canEmbed && (
-                                  <a
-                                    className="mt-3 inline-block text-sm underline text-primary"
-                                    href={url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    Open video
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-4">
-                    <Button variant="outline" onClick={() => exportResult()} className="flex-1">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Result
-                    </Button>
-                    <Button onClick={resetTest} className="flex-1">
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Take Another Test
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
     </div>

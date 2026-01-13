@@ -3,9 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Loader2, Star, Clock, Trophy } from "lucide-react";
+import { Users, Loader2, Star, Clock, Trophy, LogOut } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface Student {
   email: string;
@@ -14,6 +16,7 @@ interface Student {
   avatarUrl: string;
   lastLogin: string;
   points: number;
+  rollNo: number | null;
 }
 
 interface GroupedStudents {
@@ -42,6 +45,7 @@ const LoggedInStudents = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeBranch, setActiveBranch] = useState<string>("all");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [removingStudent, setRemovingStudent] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLoggedInStudents();
@@ -64,6 +68,42 @@ const LoggedInStudents = () => {
       console.error("Error fetching logged in students:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const removeStudent = async (email: string) => {
+    setRemovingStudent(email);
+    try {
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        toast.error("Admin session expired. Please login again.");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "remove_student_session", adminToken, studentEmail: email },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      toast.success("Student logged out successfully!");
+      
+      // Remove from local state
+      setStudents(prev => {
+        const updated: GroupedStudents = {};
+        Object.entries(prev).forEach(([branch, branchStudents]) => {
+          const filtered = branchStudents.filter(s => s.email !== email);
+          if (filtered.length > 0) {
+            updated[branch] = filtered;
+          }
+        });
+        return updated;
+      });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to remove student");
+    } finally {
+      setRemovingStudent(null);
     }
   };
 
@@ -173,9 +213,14 @@ const LoggedInStudents = () => {
                       <p className="font-medium truncate">
                         {student.fullName || student.username || student.email.split("@")[0]}
                       </p>
-                      <Badge variant="outline" className="text-xs">
-                        {branchShortNames[student.branch] || student.branch}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {branchShortNames[student.branch] || student.branch}
+                        </Badge>
+                        {student.rollNo && (
+                          <span className="text-xs text-muted-foreground">Roll: {student.rollNo}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1 text-lg font-bold text-yellow-600">
                       <Star className="w-5 h-5 fill-yellow-500" />
@@ -221,8 +266,21 @@ const LoggedInStudents = () => {
 
                 <TabsContent value="all">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {getAllStudents().map((student) => (
-                      <StudentCard key={student.email} student={student} showBranch />
+                    {getAllStudents()
+                      .sort((a, b) => {
+                        if (a.rollNo === null && b.rollNo === null) return 0;
+                        if (a.rollNo === null) return 1;
+                        if (b.rollNo === null) return -1;
+                        return a.rollNo - b.rollNo;
+                      })
+                      .map((student) => (
+                      <StudentCard 
+                        key={student.email} 
+                        student={student} 
+                        showBranch 
+                        onRemove={removeStudent}
+                        isRemoving={removingStudent === student.email}
+                      />
                     ))}
                   </div>
                 </TabsContent>
@@ -230,8 +288,20 @@ const LoggedInStudents = () => {
                 {branchKeys.map(branch => (
                   <TabsContent key={branch} value={branch}>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {students[branch].map((student) => (
-                        <StudentCard key={student.email} student={student} />
+                      {students[branch]
+                        .sort((a, b) => {
+                          if (a.rollNo === null && b.rollNo === null) return 0;
+                          if (a.rollNo === null) return 1;
+                          if (b.rollNo === null) return -1;
+                          return a.rollNo - b.rollNo;
+                        })
+                        .map((student) => (
+                        <StudentCard 
+                          key={student.email} 
+                          student={{ ...student, branch }}
+                          onRemove={removeStudent}
+                          isRemoving={removingStudent === student.email}
+                        />
                       ))}
                     </div>
                   </TabsContent>
@@ -245,7 +315,14 @@ const LoggedInStudents = () => {
   );
 };
 
-const StudentCard = ({ student, showBranch = false }: { student: Student & { branch?: string }; showBranch?: boolean }) => {
+interface StudentCardProps {
+  student: Student & { branch?: string };
+  showBranch?: boolean;
+  onRemove: (email: string) => void;
+  isRemoving: boolean;
+}
+
+const StudentCard = ({ student, showBranch = false, onRemove, isRemoving }: StudentCardProps) => {
   return (
     <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50 border border-border/50">
       <Avatar className="w-12 h-12">
@@ -261,23 +338,44 @@ const StudentCard = ({ student, showBranch = false }: { student: Student & { bra
         <p className="text-xs text-muted-foreground truncate">
           @{student.username || student.email.split("@")[0]}
         </p>
-        {showBranch && student.branch && (
-          <Badge variant="outline" className="mt-1 text-xs">
-            {branchShortNames[student.branch] || student.branch}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2 mt-1">
+          {showBranch && student.branch && (
+            <Badge variant="outline" className="text-xs">
+              {branchShortNames[student.branch] || student.branch}
+            </Badge>
+          )}
+          {student.rollNo && (
+            <span className="text-xs text-muted-foreground">Roll: {student.rollNo}</span>
+          )}
+        </div>
       </div>
-      <div className="text-right">
+      <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1 text-sm font-medium text-yellow-600">
           <Star className="w-4 h-4" />
           {student.points || 0}
         </div>
         {student.lastLogin && (
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {format(new Date(student.lastLogin), "HH:mm")}
           </p>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={() => onRemove(student.email)}
+          disabled={isRemoving}
+        >
+          {isRemoving ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <>
+              <LogOut className="w-3 h-3 mr-1" />
+              Remove
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );

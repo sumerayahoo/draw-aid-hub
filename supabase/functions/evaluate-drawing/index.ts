@@ -22,25 +22,55 @@ serve(async (req) => {
     console.log('Has user drawing:', !!userDrawing);
     console.log('Has reference image:', !!referenceImage);
 
-    const prompt = `You are an expert technical drawing evaluator specializing in ${drawingType} drawings.
+    const prompt = `You are an EXTREMELY STRICT expert technical drawing evaluator specializing in ${drawingType} engineering drawings.
 
-FIRST: Determine whether the student's image is actually an engineering/technical drawing relevant to ${drawingType}.
-- If the student's image is NOT a technical/engineering drawing (e.g., random photo, cartoon, scenery, handwriting, non-drawing), OR is clearly unrelated to ${drawingType}, you MUST return score 0 and accuracy 0.
-- In that case, include an error like "Non-technical or unrelated image" and short guidance in feedback.
+## CRITICAL FIRST STEP - IMAGE VALIDATION (MANDATORY)
+Before ANY evaluation, you MUST determine if the student's uploaded image is actually a valid technical/engineering drawing.
 
-If it IS a relevant technical drawing, analyze the student's drawing compared to the reference image. Focus on:
-- Projection accuracy (how well the views align)
-- View alignment (Front, Top, Side views if applicable)
-- Line quality and consistency
-- Dimension accuracy
-- Overall technical correctness
+### IMMEDIATELY REJECT with score 0 and accuracy 0 if the image is:
+- A photograph of a real object, person, animal, or scene
+- A cartoon, sketch, doodle, or artistic drawing (not engineering)
+- Handwritten notes or text without technical drawings
+- A screenshot of software, website, or app
+- Random shapes, scribbles, or abstract art
+- A meme, logo, or graphic design
+- Any image that is NOT a proper technical/engineering drawing on paper or CAD
+- A drawing that is completely unrelated to ${drawingType} projection
+- A blank or nearly blank image
+- A photo of something other than a technical drawing sheet
+
+If rejected, respond with:
+{
+  "score": 0,
+  "accuracy": 0,
+  "errors": ["This is not a valid ${drawingType} engineering drawing. The uploaded image appears to be [describe what it is]. Please upload an actual technical drawing."],
+  "feedback": "Your submission was rejected because it is not a technical engineering drawing. Please upload a proper ${drawingType} projection drawing on paper or from CAD software."
+}
+
+## IF IT IS A VALID TECHNICAL DRAWING:
+Analyze the student's ${drawingType} drawing compared to the reference image. Be STRICT and DETAILED in your evaluation.
+
+### Evaluation Criteria for ${drawingType} Drawings:
+1. **Projection Accuracy (0-3 points)**: How accurately are the views projected? Are dimensions transferred correctly between views?
+2. **View Alignment (0-2 points)**: Are Front, Top, Side views properly aligned? Are projection lines correct?
+3. **Line Quality (0-2 points)**: Are object lines dark and consistent? Are hidden lines dashed correctly? Are center lines properly drawn?
+4. **Dimension Accuracy (0-2 points)**: Are all dimensions present and correctly placed? Are dimension lines and arrows proper?
+5. **Overall Technical Correctness (0-1 point)**: General neatness, proper spacing, title block if applicable
+
+### Scoring Guidelines:
+- 9-10: Professional quality, minimal or no errors
+- 7-8: Good quality with minor issues
+- 5-6: Acceptable but needs improvement
+- 3-4: Poor quality with significant errors
+- 1-2: Very poor, major fundamental errors
+- 0: Not a valid technical drawing OR completely wrong type of drawing
 
 Provide your evaluation in the following JSON format ONLY (no other text):
 {
   "score": <number from 0-10>,
   "accuracy": <percentage from 0-100>,
-  "errors": [<array of specific errors found, max 5>],
-  "feedback": "<constructive feedback paragraph>"
+  "errors": [<array of specific errors found, be detailed, max 5>],
+  "feedback": "<constructive feedback paragraph explaining strengths and areas for improvement>"
 }`;
 
     const messages: any[] = [
@@ -111,10 +141,10 @@ Provide your evaluation in the following JSON format ONLY (no other text):
       console.error('Failed to parse AI response:', parseError);
       // Return a default evaluation if parsing fails
       evaluation = {
-        score: 7,
-        accuracy: 75,
-        errors: ["Unable to fully analyze the drawing. Please ensure images are clear."],
-        feedback: "The AI had difficulty analyzing this drawing. Please try uploading clearer images."
+        score: 0,
+        accuracy: 0,
+        errors: ["Unable to analyze the drawing. The image may not be a valid technical drawing."],
+        feedback: "The AI could not properly evaluate this submission. Please ensure you upload a clear photo or scan of an actual engineering drawing."
       };
     }
 

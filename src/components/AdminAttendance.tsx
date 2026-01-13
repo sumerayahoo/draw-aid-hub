@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, CheckCircle, Loader2, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, CheckCircle, Loader2, Users, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 
@@ -13,9 +13,11 @@ interface Student {
   branch: string;
   full_name: string;
   username: string | null;
+  roll_no: number | null;
 }
 
 interface AttendanceRecord {
+  id: string;
   student_email: string;
   date: string;
 }
@@ -45,6 +47,7 @@ const AdminAttendance = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [marking, setMarking] = useState<string | null>(null);
+  const [unmarking, setUnmarking] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudentsAndAttendance();
@@ -76,7 +79,15 @@ const AdminAttendance = () => {
       if (studentsResp.data?.error) throw new Error(studentsResp.data.error);
       if (attendanceResp.data?.error) throw new Error(attendanceResp.data.error);
 
-      setStudents(studentsResp.data?.students || []);
+      // Sort students by roll number (null values at the end)
+      const sortedStudents = (studentsResp.data?.students || []).sort((a: Student, b: Student) => {
+        if (a.roll_no === null && b.roll_no === null) return 0;
+        if (a.roll_no === null) return 1;
+        if (b.roll_no === null) return -1;
+        return a.roll_no - b.roll_no;
+      });
+
+      setStudents(sortedStudents);
       setAttendanceRecords(attendanceResp.data?.attendance || []);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -106,11 +117,43 @@ const AdminAttendance = () => {
       }
 
       toast.success('Attendance marked!');
-      setAttendanceRecords(prev => [...prev, { student_email: studentEmail, date: dateStr }]);
+      // Add to local state with a temporary ID
+      setAttendanceRecords(prev => [...prev, { id: crypto.randomUUID(), student_email: studentEmail, date: dateStr }]);
     } catch (error: any) {
       toast.error(error.message || 'Failed to mark attendance');
     } finally {
       setMarking(null);
+    }
+  };
+
+  const unmarkAttendance = async (studentEmail: string) => {
+    setUnmarking(studentEmail);
+    try {
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        throw new Error("Admin session expired. Please login again.");
+      }
+
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "unmark_attendance", adminToken, branch: selectedBranch, date: dateStr, studentEmail },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success('Attendance removed!');
+      // Remove from local state
+      setAttendanceRecords(prev => prev.filter(
+        record => !(record.student_email === studentEmail && record.date === dateStr)
+      ));
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to remove attendance');
+    } finally {
+      setUnmarking(null);
     }
   };
 
@@ -141,7 +184,7 @@ const AdminAttendance = () => {
           Attendance Management
         </CardTitle>
         <CardDescription>
-          Mark and view attendance for students by branch and date
+          Mark and view attendance for students by branch and date. Click on "Present" to remove attendance.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -240,7 +283,7 @@ const AdminAttendance = () => {
               </div>
               
               <div className="space-y-2">
-                {students.map((student) => {
+                {students.map((student, index) => {
                   const isMarked = isAttendanceMarked(student.email, selectedDate);
                   const monthlyCount = getStudentAttendanceForMonth(student.email);
                   
@@ -249,22 +292,39 @@ const AdminAttendance = () => {
                       key={student.email}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50"
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {student.full_name || student.username || student.email.split('@')[0]}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {student.email}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          This month: {monthlyCount} day{monthlyCount !== 1 ? 's' : ''}
-                        </p>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+                          {student.roll_no || (index + 1)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {student.full_name || student.username || student.email.split('@')[0]}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {student.email}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Roll No: {student.roll_no || 'Not set'} • This month: {monthlyCount} day{monthlyCount !== 1 ? 's' : ''}
+                          </p>
+                        </div>
                       </div>
                       {isMarked ? (
-                        <div className="flex items-center gap-2 text-green-500">
-                          <CheckCircle className="w-5 h-5" />
-                          <span className="text-sm">Present</span>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => unmarkAttendance(student.email)}
+                          disabled={unmarking === student.email}
+                          className="text-green-500 hover:text-red-500 hover:bg-red-500/10"
+                        >
+                          {unmarking === student.email ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CheckCircle className="w-5 h-5 mr-1" />
+                              <span>Present</span>
+                            </>
+                          )}
+                        </Button>
                       ) : (
                         <Button
                           size="sm"

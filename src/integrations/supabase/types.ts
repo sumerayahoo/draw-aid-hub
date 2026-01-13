@@ -157,6 +157,7 @@ export type Database = {
           last_login: string | null
           password_hash: string
           points: number | null
+          roll_no: number | null
           username: string | null
         }
         Insert: {
@@ -172,6 +173,7 @@ export type Database = {
           last_login?: string | null
           password_hash: string
           points?: number | null
+          roll_no?: number | null
           username?: string | null
         }
         Update: {
@@ -187,6 +189,7 @@ export type Database = {
           last_login?: string | null
           password_hash?: string
           points?: number | null
+          roll_no?: number | null
           username?: string | null
         }
         Relationships: []
