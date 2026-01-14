@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell, Star, Video } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, Upload, Clock, CheckCircle, XCircle, AlertCircle, Timer, History, Download, Trash2, Bell, Star, Video, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import Header from "./Header";
@@ -30,6 +32,15 @@ interface RecommendedVideo {
   id: string;
   title: string;
   file_url: string | null;
+}
+
+interface LeaderboardStudent {
+  email: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  points: number;
+  branch: string;
 }
 
 interface AITestProps {
@@ -82,6 +93,20 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
   // Recommended videos (for scores < 8)
   const [recommendedVideos, setRecommendedVideos] = useState<RecommendedVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+
+  // Leaderboard state
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardStudent[]>([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+
+  const branchShortNames: Record<string, string> = {
+    computer_engineering: "CE",
+    computer: "CE",
+    cst: "CST",
+    data_science: "DS",
+    ai: "AI",
+    ece: "ECE",
+  };
 
   const isYouTubeUrl = (url: string) => /youtu\.be|youtube\.com/.test(url);
 
@@ -169,9 +194,35 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     }
   }, []);
 
+  const fetchLeaderboard = useCallback(async () => {
+    setIsLoadingLeaderboard(true);
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('email, username, full_name, avatar_url, points, branch')
+        .not('points', 'is', null)
+        .gt('points', 0)
+        .order('points', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setLeaderboard(data || []);
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+    } finally {
+      setIsLoadingLeaderboard(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (showHistory) {
       fetchHistory();
+    }
+  }, [showHistory, fetchHistory]);
+
+  useEffect(() => {
+    if (showLeaderboard) {
+      fetchLeaderboard();
     }
   }, [showHistory, fetchHistory]);
 
@@ -462,6 +513,110 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     return "text-red-500";
   };
 
+  // Leaderboard View
+  if (showLeaderboard) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="relative">
+          <div className="absolute inset-0 blueprint-grid opacity-30" />
+          <div className="relative container mx-auto px-4 py-12">
+            <motion.button
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={() => setShowLeaderboard(false)}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Test</span>
+            </motion.button>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-8"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 mb-4">
+                <Trophy className="w-4 h-4" />
+                <span className="text-sm font-mono">Leaderboard</span>
+              </div>
+              <h1 className="font-mono text-3xl md:text-4xl font-bold mb-3">
+                Top Students
+              </h1>
+              <p className="text-muted-foreground">
+                Students ranked by points earned through AI tests
+              </p>
+            </motion.div>
+
+            <div className="space-y-3 max-w-2xl mx-auto">
+              {isLoadingLeaderboard ? (
+                <div className="text-center py-12">
+                  <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : leaderboard.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No students with points yet</p>
+                  <p className="text-sm mt-2">Complete tests with scores above 6 to earn points!</p>
+                </div>
+              ) : (
+                leaderboard.map((student, index) => (
+                  <motion.div
+                    key={student.email}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`flex items-center gap-3 p-4 rounded-xl border ${
+                      index === 0
+                        ? "bg-yellow-500/10 border-yellow-500/30"
+                        : index === 1
+                        ? "bg-gray-400/10 border-gray-400/30"
+                        : index === 2
+                        ? "bg-amber-600/10 border-amber-600/30"
+                        : "bg-card border-border/50"
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                      index === 0
+                        ? "bg-yellow-500 text-white"
+                        : index === 1
+                        ? "bg-gray-400 text-white"
+                        : index === 2
+                        ? "bg-amber-600 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <Avatar className="w-12 h-12">
+                      <AvatarImage src={student.avatar_url || undefined} alt={student.full_name || student.username || "Student"} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground">
+                        {student.full_name?.[0] || student.username?.[0] || student.email[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">
+                        {student.full_name || student.username || student.email.split("@")[0]}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {branchShortNames[student.branch] || student.branch}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-xl font-bold text-yellow-600">
+                      <Star className="w-5 h-5 fill-yellow-500" />
+                      {student.points}
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // History View
   if (showHistory) {
     return (
@@ -579,10 +734,16 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
               <ArrowLeft className="w-5 h-5" />
               <span>Back to Resources</span>
             </motion.button>
-            <Button variant="outline" onClick={() => setShowHistory(true)}>
-              <History className="w-4 h-4 mr-2" />
-              View History
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowLeaderboard(true)} className="gap-2">
+                <Trophy className="w-4 h-4 text-yellow-500" />
+                <span className="hidden sm:inline">Leaderboard</span>
+              </Button>
+              <Button variant="outline" onClick={() => setShowHistory(true)}>
+                <History className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">History</span>
+              </Button>
+            </div>
           </div>
 
           <motion.div

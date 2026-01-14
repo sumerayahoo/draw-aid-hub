@@ -7,8 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Save, Loader2, Camera, Upload, Hash } from "lucide-react";
+import { User, Save, Loader2, Camera, Upload, Hash, Link as LinkIcon, Image } from "lucide-react";
 import { toast } from "sonner";
+import { isGoogleDriveUrl, getGoogleDriveThumbnailUrl } from "@/lib/googleDrive";
 
 interface StudentData {
   email: string;
@@ -39,6 +40,8 @@ const branches = [
 const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [useGoogleDriveUrl, setUseGoogleDriveUrl] = useState(false);
+  const [googleDriveUrl, setGoogleDriveUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     fullName: studentData.fullName || "",
@@ -51,7 +54,26 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
   });
 
   const handleAvatarClick = () => {
-    fileInputRef.current?.click();
+    if (!useGoogleDriveUrl) {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleGoogleDriveUrlSubmit = () => {
+    if (!googleDriveUrl.trim()) {
+      toast.error("Please enter a Google Drive URL");
+      return;
+    }
+    
+    if (!isGoogleDriveUrl(googleDriveUrl)) {
+      toast.error("Please enter a valid Google Drive URL");
+      return;
+    }
+
+    const thumbnailUrl = getGoogleDriveThumbnailUrl(googleDriveUrl, 400);
+    setFormData(prev => ({ ...prev, avatarUrl: thumbnailUrl }));
+    setGoogleDriveUrl("");
+    toast.success("Avatar URL set! Click Save to apply changes.");
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,25 +199,62 @@ const StudentProfile = ({ studentData, onUpdate }: StudentProfileProps) => {
                 className="hidden"
               />
             </div>
-            <div className="text-center sm:text-left">
+            <div className="text-center sm:text-left flex-1">
               <p className="text-sm font-medium">Profile Picture</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Click on the avatar to upload a new image
+                {useGoogleDriveUrl ? "Paste a Google Drive image URL" : "Click on the avatar to upload a new image"}
               </p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-2 gap-2"
-                onClick={handleAvatarClick}
-                disabled={isUploading}
-              >
-                {isUploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4" />
-                )}
-                Upload Photo
-              </Button>
+              
+              {/* Toggle between upload and Google Drive URL */}
+              <div className="flex gap-2 mt-2 mb-2">
+                <Button 
+                  variant={!useGoogleDriveUrl ? "default" : "outline"}
+                  size="sm" 
+                  className="gap-1"
+                  onClick={() => setUseGoogleDriveUrl(false)}
+                >
+                  <Upload className="w-3 h-3" />
+                  Upload
+                </Button>
+                <Button 
+                  variant={useGoogleDriveUrl ? "default" : "outline"}
+                  size="sm" 
+                  className="gap-1"
+                  onClick={() => setUseGoogleDriveUrl(true)}
+                >
+                  <LinkIcon className="w-3 h-3" />
+                  Google Drive
+                </Button>
+              </div>
+
+              {useGoogleDriveUrl ? (
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    placeholder="https://drive.google.com/file/d/..."
+                    value={googleDriveUrl}
+                    onChange={(e) => setGoogleDriveUrl(e.target.value)}
+                    className="text-sm"
+                  />
+                  <Button size="sm" onClick={handleGoogleDriveUrlSubmit}>
+                    <Image className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-2 gap-2"
+                  onClick={handleAvatarClick}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  Upload Photo
+                </Button>
+              )}
             </div>
           </div>
 
