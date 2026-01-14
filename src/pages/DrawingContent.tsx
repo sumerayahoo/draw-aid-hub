@@ -7,8 +7,15 @@ import ContentCard from "@/components/ContentCard";
 import AIEvaluation from "@/components/AIEvaluation";
 import AITest from "@/components/AITest";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, Video, Box, Loader2, ExternalLink } from "lucide-react";
+import { FileText, Video, Box, Loader2, ExternalLink, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { 
+  isGoogleDriveUrl, 
+  isYouTubeUrl, 
+  getGoogleDrivePreviewUrl, 
+  getYouTubeEmbedUrl,
+  getGoogleDriveThumbnailUrl 
+} from "@/lib/googleDrive";
 
 interface ContentItem {
   id: string;
@@ -30,6 +37,7 @@ const DrawingContent = () => {
   const [showAITest, setShowAITest] = useState(false);
   const [content, setContent] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
 
   const semester = parseInt(semesterId || "1");
   const type = drawingType || "orthographic";
@@ -58,6 +66,20 @@ const DrawingContent = () => {
   const pyqs = content.filter(c => c.content_type === 'pyq');
   const videos = content.filter(c => c.content_type === 'video');
   const objects = content.filter(c => c.content_type === 'object');
+
+  const getEmbedUrl = (url: string | null): string => {
+    if (!url) return "";
+    if (isYouTubeUrl(url)) return getYouTubeEmbedUrl(url);
+    if (isGoogleDriveUrl(url)) return getGoogleDrivePreviewUrl(url);
+    return url;
+  };
+
+  const getUrlTypeLabel = (url: string | null): string => {
+    if (!url) return "";
+    if (isYouTubeUrl(url)) return "YouTube";
+    if (isGoogleDriveUrl(url)) return "Google Drive";
+    return "Link";
+  };
 
   if (showAIEvaluation) {
     return (
@@ -137,121 +159,243 @@ const DrawingContent = () => {
       </div>
 
       {/* PYQs Dialog */}
-      <Dialog open={activeDialog === "pyqs"} onOpenChange={() => setActiveDialog(null)}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={activeDialog === "pyqs"} onOpenChange={() => { setActiveDialog(null); setSelectedItem(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="font-mono flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
               Previous Year Questions
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 mt-4">
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : pyqs.length > 0 ? (
-              pyqs.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
-                >
-                  <span className="font-medium">{item.title}</span>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => item.file_url && window.open(item.file_url, '_blank')}
-                  >
-                    Download
-                  </Button>
+          <div className="mt-4">
+            {selectedItem ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">{selectedItem.title}</h3>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => selectedItem.file_url && window.open(selectedItem.file_url, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setSelectedItem(null)}
+                    >
+                      Back to List
+                    </Button>
+                  </div>
                 </div>
-              ))
+                <div className="aspect-[4/3] bg-muted rounded-lg overflow-hidden">
+                  <iframe 
+                    src={getEmbedUrl(selectedItem.file_url)}
+                    className="w-full h-full border-0"
+                    allow="autoplay"
+                    title={selectedItem.title}
+                  />
+                </div>
+              </div>
             ) : (
-              <p className="text-center text-muted-foreground py-8">
-                No papers available yet. Admin can upload in the admin panel.
-              </p>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : pyqs.length > 0 ? (
+                  pyqs.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-primary" />
+                        <div>
+                          <span className="font-medium">{item.title}</span>
+                          <p className="text-xs text-muted-foreground">{getUrlTypeLabel(item.file_url)}</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        View
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">
+                    No papers available yet. Admin can add in the admin panel.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Videos Dialog */}
-      <Dialog open={activeDialog === "videos"} onOpenChange={() => setActiveDialog(null)}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={activeDialog === "videos"} onOpenChange={() => { setActiveDialog(null); setSelectedItem(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="font-mono flex items-center gap-2">
               <Video className="w-5 h-5 text-secondary" />
               Video Tutorials
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 mt-4">
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : videos.length > 0 ? (
-              videos.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
-                >
-                  <span className="font-medium">{item.title}</span>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => item.file_url && window.open(item.file_url, '_blank')}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Watch
-                  </Button>
+          <div className="mt-4">
+            {selectedItem ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">{selectedItem.title}</h3>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => selectedItem.file_url && window.open(selectedItem.file_url, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setSelectedItem(null)}
+                    >
+                      Back to List
+                    </Button>
+                  </div>
                 </div>
-              ))
+                <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                  <iframe 
+                    src={getEmbedUrl(selectedItem.file_url)}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title={selectedItem.title}
+                  />
+                </div>
+              </div>
             ) : (
-              <p className="text-center text-muted-foreground py-8">
-                No videos available yet. Admin can upload in the admin panel.
-              </p>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : videos.length > 0 ? (
+                  videos.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center">
+                          <Play className="w-5 h-5 text-secondary" />
+                        </div>
+                        <div>
+                          <span className="font-medium">{item.title}</span>
+                          <p className="text-xs text-muted-foreground">{getUrlTypeLabel(item.file_url)}</p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <Play className="w-4 h-4" />
+                        Watch
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">
+                    No videos available yet. Admin can add in the admin panel.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Objects Dialog */}
-      <Dialog open={activeDialog === "objects"} onOpenChange={() => setActiveDialog(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={activeDialog === "objects"} onOpenChange={() => { setActiveDialog(null); setSelectedItem(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="font-mono flex items-center gap-2">
               <Box className="w-5 h-5 text-accent" />
               Reference Objects
             </DialogTitle>
           </DialogHeader>
-          <div className="grid sm:grid-cols-2 gap-4 mt-4">
-            {isLoading ? (
-              <div className="flex justify-center py-8 col-span-2">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : objects.length > 0 ? (
-              objects.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl bg-muted/50 overflow-hidden hover:shadow-lg transition-shadow"
-                >
-                  <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
-                    {item.file_url ? (
-                      <img src={item.file_url} alt={item.title} className="w-full h-full object-contain" />
-                    ) : (
-                      <Box className="w-16 h-16 text-muted-foreground/30" />
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <span className="font-medium">{item.title}</span>
+          <div className="mt-4">
+            {selectedItem ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">{selectedItem.title}</h3>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => selectedItem.file_url && window.open(selectedItem.file_url, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setSelectedItem(null)}
+                    >
+                      Back to List
+                    </Button>
                   </div>
                 </div>
-              ))
+                <div className="aspect-square max-h-[60vh] bg-muted rounded-lg overflow-hidden">
+                  <iframe 
+                    src={getEmbedUrl(selectedItem.file_url)}
+                    className="w-full h-full border-0"
+                    allow="autoplay"
+                    title={selectedItem.title}
+                  />
+                </div>
+              </div>
             ) : (
-              <p className="text-center text-muted-foreground py-8 col-span-2">
-                No objects available yet. Admin can upload in the admin panel.
-              </p>
+              <div className="grid sm:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex justify-center py-8 col-span-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : objects.length > 0 ? (
+                  objects.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl bg-muted/50 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
+                        {item.file_url && isGoogleDriveUrl(item.file_url) ? (
+                          <img 
+                            src={getGoogleDriveThumbnailUrl(item.file_url, 400)} 
+                            alt={item.title} 
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <Box className={`w-16 h-16 text-muted-foreground/30 ${item.file_url && isGoogleDriveUrl(item.file_url) ? 'hidden' : ''}`} />
+                      </div>
+                      <div className="p-4">
+                        <span className="font-medium">{item.title}</span>
+                        <p className="text-xs text-muted-foreground mt-1">{getUrlTypeLabel(item.file_url)}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-muted-foreground py-8 col-span-2">
+                    No objects available yet. Admin can add in the admin panel.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </DialogContent>
