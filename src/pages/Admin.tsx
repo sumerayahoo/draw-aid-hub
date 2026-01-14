@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Video, Box, Upload, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users } from "lucide-react";
+import { FileText, Video, Box, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import AdminAttendance from "@/components/AdminAttendance";
 import LoggedInStudents from "@/components/LoggedInStudents";
+import { isGoogleDriveUrl, isYouTubeUrl } from "@/lib/googleDrive";
 
 interface ContentItem {
   id: string;
@@ -30,12 +31,7 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [titles, setTitles] = useState({ pyq: "", video: "", object: "" });
-  const [videoUrl, setVideoUrl] = useState("");
-  const fileInputRefs = {
-    pyq: useRef<HTMLInputElement>(null),
-    object: useRef<HTMLInputElement>(null),
-    video: useRef<HTMLInputElement>(null),
-  };
+  const [urls, setUrls] = useState({ pyq: "", video: "", object: "" });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -97,23 +93,6 @@ const Admin = () => {
     navigate('/admin-login');
   };
 
-  const uploadFile = async (file: File, contentType: string) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${selectedSemester}/${selectedType}/${contentType}/${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('content')
-      .upload(fileName, file, { upsert: false });
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('content')
-      .getPublicUrl(fileName);
-
-    return publicUrl;
-  };
-
   const insertContentRow = async (payload: { semester: string; drawing_type: string; content_type: string; title: string; file_url: string | null; }) => {
     const adminToken = localStorage.getItem("admin_session_token");
     if (!adminToken) throw new Error("Admin session expired. Please login again.");
@@ -138,40 +117,66 @@ const Admin = () => {
     if (data?.error) throw new Error(data.error);
   };
 
-  const handlePYQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !titles.pyq.trim()) {
+  const validateUrl = (url: string, type: 'pyq' | 'video' | 'object'): boolean => {
+    if (!url.trim()) {
+      toast.error("Please enter a URL");
+      return false;
+    }
+    
+    const isGDrive = isGoogleDriveUrl(url);
+    const isYT = isYouTubeUrl(url);
+    
+    if (type === 'video') {
+      if (!isGDrive && !isYT) {
+        toast.error("Please enter a valid Google Drive or YouTube URL");
+        return false;
+      }
+    } else {
+      if (!isGDrive) {
+        toast.error("Please enter a valid Google Drive URL");
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const handlePYQAdd = async () => {
+    if (!titles.pyq.trim()) {
       toast.error("Please enter a title first");
       return;
     }
+    
+    if (!validateUrl(urls.pyq, 'pyq')) return;
 
     setUploading('pyq');
     try {
-      const fileUrl = await uploadFile(file, 'pyq');
-
       await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'pyq',
         title: titles.pyq,
-        file_url: fileUrl,
+        file_url: urls.pyq.trim(),
       });
 
-      toast.success("PYQ uploaded successfully!");
+      toast.success("PYQ added successfully!");
       setTitles(prev => ({ ...prev, pyq: "" }));
+      setUrls(prev => ({ ...prev, pyq: "" }));
       fetchContent();
     } catch (error: any) {
-      toast.error(error.message || "Failed to upload");
+      toast.error(error.message || "Failed to add PYQ");
     } finally {
       setUploading(null);
     }
   };
 
   const handleVideoAdd = async () => {
-    if (!titles.video.trim() || !videoUrl.trim()) {
-      toast.error("Please enter both title and URL");
+    if (!titles.video.trim()) {
+      toast.error("Please enter a title first");
       return;
     }
+    
+    if (!validateUrl(urls.video, 'video')) return;
 
     setUploading('video');
     try {
@@ -180,12 +185,12 @@ const Admin = () => {
         drawing_type: selectedType,
         content_type: 'video',
         title: titles.video,
-        file_url: videoUrl,
+        file_url: urls.video.trim(),
       });
 
       toast.success("Video added successfully!");
       setTitles(prev => ({ ...prev, video: "" }));
-      setVideoUrl("");
+      setUrls(prev => ({ ...prev, video: "" }));
       fetchContent();
     } catch (error: any) {
       toast.error(error.message || "Failed to add video");
@@ -194,59 +199,30 @@ const Admin = () => {
     }
   };
 
-  const handleObjectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !titles.object.trim()) {
+  const handleObjectAdd = async () => {
+    if (!titles.object.trim()) {
       toast.error("Please enter a title first");
       return;
     }
+    
+    if (!validateUrl(urls.object, 'object')) return;
 
     setUploading('object');
     try {
-      const fileUrl = await uploadFile(file, 'object');
-
       await insertContentRow({
         semester: selectedSemester,
         drawing_type: selectedType,
         content_type: 'object',
         title: titles.object,
-        file_url: fileUrl,
+        file_url: urls.object.trim(),
       });
 
-      toast.success("Object image uploaded successfully!");
+      toast.success("Object added successfully!");
       setTitles(prev => ({ ...prev, object: "" }));
+      setUrls(prev => ({ ...prev, object: "" }));
       fetchContent();
     } catch (error: any) {
-      toast.error(error.message || "Failed to upload");
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !titles.video.trim()) {
-      toast.error("Please enter a title first");
-      return;
-    }
-
-    setUploading('video');
-    try {
-      const fileUrl = await uploadFile(file, 'video');
-
-      await insertContentRow({
-        semester: selectedSemester,
-        drawing_type: selectedType,
-        content_type: 'video',
-        title: titles.video,
-        file_url: fileUrl,
-      });
-
-      toast.success("Video uploaded successfully!");
-      setTitles(prev => ({ ...prev, video: "" }));
-      fetchContent();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to upload");
+      toast.error(error.message || "Failed to add object");
     } finally {
       setUploading(null);
     }
@@ -260,6 +236,13 @@ const Admin = () => {
     } catch (error: any) {
       toast.error(error.message || "Failed to delete");
     }
+  };
+
+  const getUrlTypeLabel = (url: string | null): string => {
+    if (!url) return "";
+    if (isYouTubeUrl(url)) return "YouTube";
+    if (isGoogleDriveUrl(url)) return "Google Drive";
+    return "Link";
   };
 
   return (
@@ -376,7 +359,7 @@ const Admin = () => {
                       Previous Year Questions
                     </CardTitle>
                     <CardDescription>
-                      Upload PDF files for past exam papers and practice questions
+                      Add Google Drive links to past exam papers and practice questions
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -391,37 +374,41 @@ const Admin = () => {
                           />
                         </div>
                         <div>
-                          <Label>PDF File</Label>
-                          <div 
-                            onClick={() => titles.pyq && fileInputRefs.pyq.current?.click()}
-                            className={`mt-2 border-2 border-dashed border-border rounded-xl p-8 text-center transition-colors cursor-pointer ${titles.pyq ? 'hover:border-primary/50' : 'opacity-50 cursor-not-allowed'}`}
-                          >
-                            {uploading === 'pyq' ? (
-                              <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
-                            ) : (
-                              <>
-                                <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                                <p className="text-sm text-muted-foreground">
-                                  {titles.pyq ? 'Click to upload' : 'Enter title first'}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                          <input
-                            ref={fileInputRefs.pyq}
-                            type="file"
-                            accept=".pdf"
-                            onChange={handlePYQUpload}
-                            className="hidden"
+                          <Label>Google Drive URL</Label>
+                          <Input 
+                            placeholder="https://drive.google.com/file/d/..."
+                            value={urls.pyq}
+                            onChange={(e) => setUrls(prev => ({ ...prev, pyq: e.target.value }))}
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Paste the sharing link from your Google Drive folder
+                          </p>
                         </div>
                       </div>
+                      <Button 
+                        onClick={handlePYQAdd} 
+                        className="gap-2"
+                        disabled={uploading === 'pyq' || !titles.pyq.trim() || !urls.pyq.trim()}
+                      >
+                        {uploading === 'pyq' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        Add PYQ
+                      </Button>
 
                       {/* List existing PYQs */}
                       <div className="mt-6 space-y-2">
                         {content.filter(c => c.content_type === 'pyq').map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <span>{item.title}</span>
+                            <div className="flex items-center gap-2">
+                              <LinkIcon className="w-4 h-4 text-primary" />
+                              <span>{item.title}</span>
+                              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                                {getUrlTypeLabel(item.file_url)}
+                              </span>
+                            </div>
                             <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
@@ -442,7 +429,7 @@ const Admin = () => {
                       Video Tutorials
                     </CardTitle>
                     <CardDescription>
-                      Add video tutorials via URL or upload video files
+                      Add Google Drive or YouTube video links
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -457,51 +444,41 @@ const Admin = () => {
                           />
                         </div>
                         <div>
-                          <Label>Video URL (YouTube or direct link)</Label>
+                          <Label>Video URL (Google Drive or YouTube)</Label>
                           <Input 
-                            placeholder="https://youtube.com/watch?v=..."
-                            value={videoUrl}
-                            onChange={(e) => setVideoUrl(e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... or https://youtube.com/watch?v=..."
+                            value={urls.video}
+                            onChange={(e) => setUrls(prev => ({ ...prev, video: e.target.value }))}
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Paste a Google Drive sharing link or YouTube video URL
+                          </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={handleVideoAdd} 
-                          className="gap-2"
-                          disabled={uploading === 'video' || !titles.video.trim() || !videoUrl.trim()}
-                        >
-                          {uploading === 'video' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4" />
-                          )}
-                          Add URL
-                        </Button>
-                        <div className="text-sm text-muted-foreground flex items-center">or</div>
-                        <Button
-                          variant="outline"
-                          className="gap-2"
-                          onClick={() => titles.video && fileInputRefs.video.current?.click()}
-                          disabled={uploading === 'video' || !titles.video.trim()}
-                        >
-                          <Upload className="w-4 h-4" />
-                          Upload File
-                        </Button>
-                        <input
-                          ref={fileInputRefs.video}
-                          type="file"
-                          accept="video/*"
-                          onChange={handleVideoFileUpload}
-                          className="hidden"
-                        />
-                      </div>
+                      <Button 
+                        onClick={handleVideoAdd} 
+                        className="gap-2"
+                        disabled={uploading === 'video' || !titles.video.trim() || !urls.video.trim()}
+                      >
+                        {uploading === 'video' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        Add Video
+                      </Button>
 
                       {/* List existing videos */}
                       <div className="mt-6 space-y-2">
                         {content.filter(c => c.content_type === 'video').map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <span>{item.title}</span>
+                            <div className="flex items-center gap-2">
+                              <LinkIcon className="w-4 h-4 text-secondary" />
+                              <span>{item.title}</span>
+                              <span className="text-xs bg-secondary/10 text-secondary px-2 py-0.5 rounded">
+                                {getUrlTypeLabel(item.file_url)}
+                              </span>
+                            </div>
                             <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
@@ -519,59 +496,58 @@ const Admin = () => {
                   <CardHeader>
                     <CardTitle className="font-mono flex items-center gap-2">
                       <Box className="w-5 h-5 text-accent" />
-                      Reference Objects
+                      3D Reference Objects
                     </CardTitle>
                     <CardDescription>
-                      Upload images of 3D objects for drawing practice
+                      Add Google Drive links to 3D reference images and models
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="grid gap-4">
                         <div>
-                          <Label>Object Name</Label>
+                          <Label>Object Title</Label>
                           <Input 
-                            placeholder="e.g., Simple Bracket"
+                            placeholder="e.g., Complex Assembly Model"
                             value={titles.object}
                             onChange={(e) => setTitles(prev => ({ ...prev, object: e.target.value }))}
                           />
                         </div>
                         <div>
-                          <Label>Object Image</Label>
-                          <div 
-                            onClick={() => titles.object && fileInputRefs.object.current?.click()}
-                            className={`mt-2 border-2 border-dashed border-border rounded-xl p-8 text-center transition-colors cursor-pointer ${titles.object ? 'hover:border-primary/50' : 'opacity-50 cursor-not-allowed'}`}
-                          >
-                            {uploading === 'object' ? (
-                              <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
-                            ) : (
-                              <>
-                                <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                                <p className="text-sm text-muted-foreground">
-                                  {titles.object ? 'Click to upload' : 'Enter name first'}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                          <input
-                            ref={fileInputRefs.object}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleObjectUpload}
-                            className="hidden"
+                          <Label>Google Drive URL</Label>
+                          <Input 
+                            placeholder="https://drive.google.com/file/d/..."
+                            value={urls.object}
+                            onChange={(e) => setUrls(prev => ({ ...prev, object: e.target.value }))}
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Paste the sharing link from your Google Drive folder
+                          </p>
                         </div>
                       </div>
+                      <Button 
+                        onClick={handleObjectAdd} 
+                        className="gap-2"
+                        disabled={uploading === 'object' || !titles.object.trim() || !urls.object.trim()}
+                      >
+                        {uploading === 'object' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        Add Object
+                      </Button>
 
                       {/* List existing objects */}
                       <div className="mt-6 space-y-2">
                         {content.filter(c => c.content_type === 'object').map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <div className="flex items-center gap-3">
-                              {item.file_url && (
-                                <img src={item.file_url} alt={item.title} className="w-10 h-10 object-cover rounded" />
-                              )}
+                            <div className="flex items-center gap-2">
+                              <LinkIcon className="w-4 h-4 text-accent" />
                               <span>{item.title}</span>
+                              <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded">
+                                {getUrlTypeLabel(item.file_url)}
+                              </span>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
@@ -583,7 +559,6 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               </TabsContent>
-
             </Tabs>
           </motion.div>
         </div>
