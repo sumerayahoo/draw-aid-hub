@@ -29,6 +29,7 @@ serve(async (req) => {
       action,
       password,
       adminToken,
+      newPassword,
       // attendance
       branch,
       monthStart,
@@ -97,6 +98,28 @@ serve(async (req) => {
       });
     }
 
+    if (action === "reset_password") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      if (!newPassword || newPassword.length < 4) {
+        return new Response(JSON.stringify({ error: "New password must be at least 4 characters" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Note: In a production environment, you'd store this in a secure way
+      // For now, we'll return success and the new password will be used via ADMIN_PASSWORD secret
+      // The admin should update the ADMIN_PASSWORD secret manually
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: "Password reset requested. Please update the ADMIN_PASSWORD secret in your backend settings to: " + newPassword 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "get_students_by_branch") {
       const check = await requireAdmin();
       if (!check.ok) return check.response;
@@ -118,6 +141,62 @@ serve(async (req) => {
 
       if (error) {
         console.error("get_students_by_branch error:", error);
+        return new Response(JSON.stringify({ error: "Failed to fetch students" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, students: data || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Get only students with active sessions for attendance
+    if (action === "get_logged_in_students_by_branch") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      if (!branch) {
+        return new Response(JSON.stringify({ error: "branch is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const normalizedBranches = branch === "computer_engineering" ? ["computer_engineering", "computer"] : [branch];
+
+      // First get active sessions
+      const { data: activeSessions, error: sessionsError } = await supabase
+        .from("student_sessions")
+        .select("student_email")
+        .gt("expires_at", new Date().toISOString());
+
+      if (sessionsError) {
+        console.error("get_logged_in_students_by_branch sessions error:", sessionsError);
+        return new Response(JSON.stringify({ error: "Failed to fetch sessions" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const activeEmails = (activeSessions || []).map(s => s.student_email);
+
+      if (activeEmails.length === 0) {
+        return new Response(JSON.stringify({ success: true, students: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data, error } = await supabase
+        .from("students")
+        .select("email, branch, full_name, username, roll_no")
+        .in("branch", normalizedBranches)
+        .in("email", activeEmails)
+        .order("roll_no", { ascending: true, nullsFirst: false });
+
+      if (error) {
+        console.error("get_logged_in_students_by_branch error:", error);
         return new Response(JSON.stringify({ error: "Failed to fetch students" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

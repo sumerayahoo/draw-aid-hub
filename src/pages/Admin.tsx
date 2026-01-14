@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Video, Box, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users, Link as LinkIcon } from "lucide-react";
+import { FileText, Video, Box, Plus, Trash2, Shield, LogOut, Loader2, Calendar, Users, Link as LinkIcon, Key, Settings } from "lucide-react";
 import { toast } from "sonner";
 import AdminAttendance from "@/components/AdminAttendance";
 import LoggedInStudents from "@/components/LoggedInStudents";
 import { isGoogleDriveUrl, isYouTubeUrl } from "@/lib/googleDrive";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 interface ContentItem {
   id: string;
@@ -32,6 +33,10 @@ const Admin = () => {
   const [uploading, setUploading] = useState<string | null>(null);
   const [titles, setTitles] = useState({ pyq: "", video: "", object: "" });
   const [urls, setUrls] = useState({ pyq: "", video: "", object: "" });
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,6 +96,45 @@ const Admin = () => {
     localStorage.removeItem("admin_session_token");
     toast.success("Logged out successfully!");
     navigate('/admin-login');
+  };
+
+  const handlePasswordReset = async () => {
+    if (!newPassword.trim()) {
+      toast.error("Please enter a new password");
+      return;
+    }
+    
+    if (newPassword.length < 4) {
+      toast.error("Password must be at least 4 characters");
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) throw new Error("Admin session expired");
+
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "reset_password", adminToken, newPassword },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      toast.success("Password reset initiated! " + (data?.message || ""));
+      setShowPasswordReset(false);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to reset password");
+    } finally {
+      setIsResettingPassword(false);
+    }
   };
 
   const insertContentRow = async (payload: { semester: string; drawing_type: string; content_type: string; title: string; file_url: string | null; }) => {
@@ -270,10 +314,16 @@ const Admin = () => {
                 Manage content for all semesters and drawing types
               </p>
             </div>
-            <Button variant="outline" onClick={handleLogout} className="gap-2">
-              <LogOut className="w-4 h-4" />
-              Logout
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowPasswordReset(true)} className="gap-2">
+                <Key className="w-4 h-4" />
+                <span className="hidden sm:inline">Reset Password</span>
+              </Button>
+              <Button variant="outline" onClick={handleLogout} className="gap-2">
+                <LogOut className="w-4 h-4" />
+                Logout
+              </Button>
+            </div>
           </motion.div>
 
           {/* Filters */}
@@ -563,6 +613,58 @@ const Admin = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={showPasswordReset} onOpenChange={setShowPasswordReset}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              Reset Admin Password
+            </DialogTitle>
+            <DialogDescription>
+              Enter a new password for admin access. You'll need to update the ADMIN_PASSWORD secret in your backend settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPasswordReset(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handlePasswordReset} disabled={isResettingPassword}>
+              {isResettingPassword ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Resetting...
+                </>
+              ) : (
+                "Reset Password"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

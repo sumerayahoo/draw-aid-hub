@@ -66,7 +66,7 @@ const AdminAttendance = () => {
 
       const [studentsResp, attendanceResp] = await Promise.all([
         supabase.functions.invoke("admin-api", {
-          body: { action: "get_students_by_branch", adminToken, branch: selectedBranch },
+          body: { action: "get_logged_in_students_by_branch", adminToken, branch: selectedBranch },
         }),
         supabase.functions.invoke("admin-api", {
           body: { action: "get_attendance_by_branch_month", adminToken, branch: selectedBranch, monthStart, monthEnd },
@@ -184,7 +184,8 @@ const AdminAttendance = () => {
           Attendance Management
         </CardTitle>
         <CardDescription>
-          Mark and view attendance for students by branch and date. Click on "Present" to remove attendance.
+          Mark and view attendance for students by branch and date. Only students currently logged in are shown.
+          Click on "Present" to remove attendance.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -273,7 +274,8 @@ const AdminAttendance = () => {
           ) : students.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No students registered in {branchShortNames[selectedBranch]}</p>
+              <p>No students currently logged in for {branchShortNames[selectedBranch]}</p>
+              <p className="text-sm mt-2">Students need to log in to appear here for attendance marking</p>
             </div>
           ) : (
             <div className="space-y-4">
