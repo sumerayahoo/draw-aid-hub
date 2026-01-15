@@ -318,20 +318,89 @@ serve(async (req) => {
         });
       }
 
-      const { error } = await supabase
+      const emailLower = String(studentEmail).toLowerCase();
+
+      // Delete all sessions for this student
+      const { error: sessionError } = await supabase
         .from("student_sessions")
         .delete()
-        .eq("student_email", String(studentEmail).toLowerCase());
+        .eq("student_email", emailLower);
 
-      if (error) {
-        console.error("remove_student_session error:", error);
+      if (sessionError) {
+        console.error("remove_student_session error:", sessionError);
         return new Response(JSON.stringify({ error: "Failed to remove student session" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      // Lock the student account so they can't login again until admin unlocks
+      const { error: lockError } = await supabase
+        .from("students")
+        .update({ login_locked: true })
+        .eq("email", emailLower);
+
+      if (lockError) {
+        console.error("lock student error:", lockError);
+      }
+
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Admin can unlock a student to allow them to login again
+    if (action === "unlock_student") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      if (!studentEmail) {
+        return new Response(JSON.stringify({ error: "studentEmail is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const emailLower = String(studentEmail).toLowerCase();
+
+      const { error } = await supabase
+        .from("students")
+        .update({ login_locked: false })
+        .eq("email", emailLower);
+
+      if (error) {
+        console.error("unlock_student error:", error);
+        return new Response(JSON.stringify({ error: "Failed to unlock student" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Get locked students that admin has logged out
+    if (action === "get_locked_students") {
+      const check = await requireAdmin();
+      if (!check.ok) return check.response;
+
+      const { data, error } = await supabase
+        .from("students")
+        .select("email, username, full_name, avatar_url, branch, roll_no, points")
+        .eq("login_locked", true)
+        .order("branch", { ascending: true });
+
+      if (error) {
+        console.error("get_locked_students error:", error);
+        return new Response(JSON.stringify({ error: "Failed to fetch locked students" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, students: data || [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
