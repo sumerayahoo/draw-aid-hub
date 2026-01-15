@@ -224,7 +224,7 @@ const AITest = ({ drawingType, onBack }: AITestProps) => {
     if (showLeaderboard) {
       fetchLeaderboard();
     }
-  }, [showHistory, fetchHistory]);
+  }, [showLeaderboard, fetchLeaderboard]);
 
   const extractKeywords = (text: string) => {
     const raw = text

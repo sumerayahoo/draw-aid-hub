@@ -184,7 +184,7 @@ serve(async (req) => {
       // Try login with email or username
       let query = supabase
         .from('students')
-        .select('id, email, username, branch, full_name, avatar_url, interests, goals, extra_info, points, roll_no')
+        .select('id, email, username, branch, full_name, avatar_url, interests, goals, extra_info, points, roll_no, login_locked')
         .eq('password_hash', passwordHash);
 
       if (email) {
@@ -199,6 +199,14 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ error: 'Invalid credentials' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if student is locked by admin
+      if (student.login_locked) {
+        return new Response(
+          JSON.stringify({ error: 'Your account is locked. Please contact admin to re-enable login.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 

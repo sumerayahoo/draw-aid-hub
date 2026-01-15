@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Loader2, Star, Clock, Trophy, LogOut } from "lucide-react";
+import { Users, Loader2, Star, Clock, Trophy, LogOut, Unlock, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -17,6 +17,16 @@ interface Student {
   lastLogin: string;
   points: number;
   rollNo: number | null;
+}
+
+interface LockedStudent {
+  email: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  branch: string;
+  roll_no: number | null;
+  points: number;
 }
 
 interface GroupedStudents {
@@ -42,15 +52,22 @@ const branchFullNames: Record<string, string> = {
 
 const LoggedInStudents = () => {
   const [students, setStudents] = useState<GroupedStudents>({});
+  const [lockedStudents, setLockedStudents] = useState<LockedStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeBranch, setActiveBranch] = useState<string>("all");
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showLocked, setShowLocked] = useState(false);
   const [removingStudent, setRemovingStudent] = useState<string | null>(null);
+  const [unlockingStudent, setUnlockingStudent] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLoggedInStudents();
+    fetchLockedStudents();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchLoggedInStudents, 30000);
+    const interval = setInterval(() => {
+      fetchLoggedInStudents();
+      fetchLockedStudents();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -71,6 +88,24 @@ const LoggedInStudents = () => {
     }
   };
 
+  const fetchLockedStudents = async () => {
+    try {
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) return;
+
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "get_locked_students", adminToken },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        setLockedStudents(data.students || []);
+      }
+    } catch (error) {
+      console.error("Error fetching locked students:", error);
+    }
+  };
+
   const removeStudent = async (email: string) => {
     setRemovingStudent(email);
     try {
@@ -87,7 +122,7 @@ const LoggedInStudents = () => {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      toast.success("Student logged out successfully!");
+      toast.success("Student logged out and locked!");
       
       // Remove from local state
       setStudents(prev => {
@@ -100,10 +135,40 @@ const LoggedInStudents = () => {
         });
         return updated;
       });
+
+      // Refresh locked students list
+      fetchLockedStudents();
     } catch (error: any) {
       toast.error(error.message || "Failed to remove student");
     } finally {
       setRemovingStudent(null);
+    }
+  };
+
+  const unlockStudent = async (email: string) => {
+    setUnlockingStudent(email);
+    try {
+      const adminToken = localStorage.getItem("admin_session_token");
+      if (!adminToken) {
+        toast.error("Admin session expired. Please login again.");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: { action: "unlock_student", adminToken, studentEmail: email },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      toast.success("Student can now login again!");
+      
+      // Remove from locked list
+      setLockedStudents(prev => prev.filter(s => s.email !== email));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to unlock student");
+    } finally {
+      setUnlockingStudent(null);
     }
   };
 
@@ -138,19 +203,19 @@ const LoggedInStudents = () => {
 
   return (
     <div className="space-y-6">
-      {/* Leaderboard Toggle */}
-      <div className="flex gap-4">
+      {/* View Toggle */}
+      <div className="flex gap-4 flex-wrap">
         <button
-          onClick={() => setShowLeaderboard(false)}
+          onClick={() => { setShowLeaderboard(false); setShowLocked(false); }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-            !showLeaderboard ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
+            !showLeaderboard && !showLocked ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
           }`}
         >
           <Users className="w-4 h-4" />
-          Students
+          Active Students
         </button>
         <button
-          onClick={() => setShowLeaderboard(true)}
+          onClick={() => { setShowLeaderboard(true); setShowLocked(false); }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
             showLeaderboard ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
           }`}
@@ -158,9 +223,52 @@ const LoggedInStudents = () => {
           <Trophy className="w-4 h-4" />
           Leaderboard
         </button>
+        <button
+          onClick={() => { setShowLocked(true); setShowLeaderboard(false); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            showLocked ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
+          }`}
+        >
+          <Lock className="w-4 h-4" />
+          Locked Students
+          {lockedStudents.length > 0 && (
+            <Badge variant="destructive" className="ml-1">{lockedStudents.length}</Badge>
+          )}
+        </button>
       </div>
 
-      {showLeaderboard ? (
+      {showLocked ? (
+        <Card className="border-border/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-destructive" />
+              Locked Students
+            </CardTitle>
+            <CardDescription>
+              Students who have been logged out and cannot login until unlocked
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {lockedStudents.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Unlock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No locked students</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {lockedStudents.map((student) => (
+                  <LockedStudentCard 
+                    key={student.email} 
+                    student={student}
+                    onUnlock={unlockStudent}
+                    isUnlocking={unlockingStudent === student.email}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : showLeaderboard ? (
         <Card className="border-border/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -372,7 +480,64 @@ const StudentCard = ({ student, showBranch = false, onRemove, isRemoving }: Stud
           ) : (
             <>
               <LogOut className="w-3 h-3 mr-1" />
-              Remove
+              Logout & Lock
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+interface LockedStudentCardProps {
+  student: LockedStudent;
+  onUnlock: (email: string) => void;
+  isUnlocking: boolean;
+}
+
+const LockedStudentCard = ({ student, onUnlock, isUnlocking }: LockedStudentCardProps) => {
+  return (
+    <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+      <Avatar className="w-12 h-12">
+        <AvatarImage src={student.avatar_url || undefined} alt={student.full_name || student.username || ""} />
+        <AvatarFallback className="bg-gradient-to-br from-destructive/50 to-destructive text-destructive-foreground">
+          {student.full_name?.[0] || student.username?.[0] || student.email[0].toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium truncate">
+          {student.full_name || student.username || student.email.split("@")[0]}
+        </p>
+        <p className="text-xs text-muted-foreground truncate">
+          {student.email}
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <Badge variant="outline" className="text-xs">
+            {branchShortNames[student.branch] || student.branch}
+          </Badge>
+          {student.roll_no && (
+            <span className="text-xs text-muted-foreground">Roll: {student.roll_no}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <div className="flex items-center gap-1 text-sm font-medium text-yellow-600">
+          <Star className="w-4 h-4" />
+          {student.points || 0}
+        </div>
+        <Button
+          variant="default"
+          size="sm"
+          className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+          onClick={() => onUnlock(student.email)}
+          disabled={isUnlocking}
+        >
+          {isUnlocking ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <>
+              <Unlock className="w-3 h-3 mr-1" />
+              Allow Login
             </>
           )}
         </Button>
