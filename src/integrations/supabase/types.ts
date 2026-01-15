@@ -155,6 +155,7 @@ export type Database = {
           id: string
           interests: string | null
           last_login: string | null
+          login_locked: boolean | null
           password_hash: string
           points: number | null
           roll_no: number | null
@@ -171,6 +172,7 @@ export type Database = {
           id?: string
           interests?: string | null
           last_login?: string | null
+          login_locked?: boolean | null
           password_hash: string
           points?: number | null
           roll_no?: number | null
@@ -187,6 +189,7 @@ export type Database = {
           id?: string
           interests?: string | null
           last_login?: string | null
+          login_locked?: boolean | null
           password_hash?: string
           points?: number | null
           roll_no?: number | null
