@@ -1,4 +1,4 @@
-import { Compass, Heart } from "lucide-react";
+import { Compass } from "lucide-react";
 import { motion } from "framer-motion";
 
 const Footer = () => {
@@ -43,10 +43,8 @@ const Footer = () => {
             transition={{ delay: 0.2 }}
             className="pt-4"
           >
-            <h2 className="font-mono text-xl md:text-2xl font-bold text-center flex items-center gap-2 justify-center">
-              <span className="text-muted-foreground">Made with</span>
-              <Heart className="w-5 h-5 text-destructive fill-destructive animate-pulse" />
-              <span className="text-muted-foreground">by</span>
+            <h2 className="font-mono text-xl md:text-2xl font-bold text-center">
+              <span className="text-muted-foreground">Made by </span>
               <span className="gradient-text">Sumera Feroz</span>
             </h2>
           </motion.div>

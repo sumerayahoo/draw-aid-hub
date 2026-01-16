@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ChevronLeft, Compass, LogOut, User } from "lucide-react";
 import { Button } from "./ui/button";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import ThemeToggle from "./ThemeToggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +68,8 @@ const Header = () => {
         </div>
         
         <nav className="flex items-center gap-2">
+          <ThemeToggle />
+          
           <Button
             variant="ghost"
             size="sm"
