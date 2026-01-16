@@ -35,6 +35,24 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_settings: {
+        Row: {
+          id: string
+          password_hash: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          password_hash: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          password_hash?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           branch: string

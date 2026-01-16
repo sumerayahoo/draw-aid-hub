@@ -14,6 +14,16 @@ function addDays(date: Date, days: number) {
   return d;
 }
 
+async function getAdminPassword(supabase: any): Promise<string> {
+  const { data } = await supabase
+    .from("admin_settings")
+    .select("password_hash")
+    .eq("id", "main")
+    .maybeSingle();
+  
+  return data?.password_hash || Deno.env.get("ADMIN_PASSWORD") || DEFAULT_ADMIN_PASSWORD;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -61,7 +71,7 @@ serve(async (req) => {
     };
 
     if (action === "login") {
-      const expected = Deno.env.get("ADMIN_PASSWORD") || DEFAULT_ADMIN_PASSWORD;
+      const expected = await getAdminPassword(supabase);
       if (!password || password !== expected) {
         return new Response(JSON.stringify({ error: "Invalid password" }), {
           status: 401,
@@ -109,12 +119,23 @@ serve(async (req) => {
         });
       }
 
-      // Note: In a production environment, you'd store this in a secure way
-      // For now, we'll return success and the new password will be used via ADMIN_PASSWORD secret
-      // The admin should update the ADMIN_PASSWORD secret manually
+      // Update the password in the admin_settings table
+      const { error: updateError } = await supabase
+        .from("admin_settings")
+        .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
+        .eq("id", "main");
+
+      if (updateError) {
+        console.error("reset_password update error:", updateError);
+        return new Response(JSON.stringify({ error: "Failed to update password" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       return new Response(JSON.stringify({ 
         success: true, 
-        message: "Password reset requested. Please update the ADMIN_PASSWORD secret in your backend settings to: " + newPassword 
+        message: "Password updated successfully!" 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
