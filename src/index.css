@@ -43,13 +43,15 @@
     --blueprint-accent: 195 100% 50%;
     --blueprint-grid: 210 30% 88%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(210 100% 40%), hsl(195 80% 45%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 20% 98%));
+    --gradient-primary: linear-gradient(135deg, hsl(210 100% 45%), hsl(195 85% 50%), hsl(175 70% 45%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 25% 97%));
     --gradient-dark: linear-gradient(135deg, hsl(215 60% 12%), hsl(210 50% 25%));
+    --gradient-hero: linear-gradient(180deg, hsl(210 25% 97%) 0%, hsl(210 30% 94%) 100%);
     
-    --shadow-card: 0 4px 20px -4px hsl(210 50% 25% / 0.15);
-    --shadow-card-hover: 0 8px 30px -4px hsl(210 50% 25% / 0.25);
-    --shadow-glow: 0 0 30px hsl(195 100% 50% / 0.3);
+    --shadow-card: 0 4px 24px -4px hsl(210 50% 25% / 0.12);
+    --shadow-card-hover: 0 12px 40px -8px hsl(210 50% 25% / 0.2);
+    --shadow-glow: 0 0 40px hsl(195 100% 50% / 0.25);
+    --shadow-elevated: 0 20px 50px -12px hsl(210 50% 25% / 0.15);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -96,13 +98,15 @@
     --blueprint-accent: 195 100% 50%;
     --blueprint-grid: 215 40% 15%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(195 100% 50%), hsl(175 70% 45%));
+    --gradient-primary: linear-gradient(135deg, hsl(195 100% 55%), hsl(175 70% 50%), hsl(160 80% 45%));
     --gradient-card: linear-gradient(145deg, hsl(215 50% 14%), hsl(215 50% 10%));
     --gradient-dark: linear-gradient(135deg, hsl(215 60% 8%), hsl(210 50% 15%));
+    --gradient-hero: linear-gradient(180deg, hsl(215 60% 8%) 0%, hsl(215 50% 12%) 100%);
     
-    --shadow-card: 0 4px 20px -4px hsl(0 0% 0% / 0.4);
-    --shadow-card-hover: 0 8px 30px -4px hsl(0 0% 0% / 0.5);
-    --shadow-glow: 0 0 40px hsl(195 100% 50% / 0.4);
+    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.4);
+    --shadow-card-hover: 0 12px 40px -8px hsl(0 0% 0% / 0.5);
+    --shadow-glow: 0 0 50px hsl(195 100% 50% / 0.35);
+    --shadow-elevated: 0 20px 50px -12px hsl(0 0% 0% / 0.4);
   }
 }
 
@@ -140,7 +144,7 @@
 
   .glass-card {
     background: hsl(var(--card) / 0.8);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
     border: 1px solid hsl(var(--border) / 0.5);
   }
 
@@ -173,44 +177,73 @@
   }
 
   .animate-pulse-slow {
-    animation: pulse 3s ease-in-out infinite;
+    animation: pulse-slow 4s ease-in-out infinite;
   }
 
   .animate-glow {
     animation: glow 2s ease-in-out infinite alternate;
   }
+
+  .bg-gradient-radial {
+    background: radial-gradient(circle, var(--tw-gradient-stops));
+  }
+
+  .hover-lift {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-elevated);
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-15px) rotate(2deg); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.02); }
 }
 
 @keyframes glow {
   from { box-shadow: 0 0 20px hsl(195 100% 50% / 0.2); }
-  to { box-shadow: 0 0 30px hsl(195 100% 50% / 0.4); }
+  to { box-shadow: 0 0 40px hsl(195 100% 50% / 0.4); }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 .animate-slide-up {
-  animation: slideUp 0.5s ease-out forwards;
+  animation: slideUp 0.6s ease-out forwards;
 }
 
 .animate-slide-up-delay-1 {
-  animation: slideUp 0.5s ease-out 0.1s forwards;
+  animation: slideUp 0.6s ease-out 0.1s forwards;
   opacity: 0;
 }
 
 .animate-slide-up-delay-2 {
-  animation: slideUp 0.5s ease-out 0.2s forwards;
+  animation: slideUp 0.6s ease-out 0.2s forwards;
   opacity: 0;
 }
 
 .animate-slide-up-delay-3 {
-  animation: slideUp 0.5s ease-out 0.3s forwards;
+  animation: slideUp 0.6s ease-out 0.3s forwards;
   opacity: 0;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
 }
